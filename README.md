@@ -5,6 +5,9 @@ Confirmación automática de citas para clínicas odontológicas pequeñas.
 El sistema envía los recordatorios, interpreta la respuesta del paciente, mueve el
 estado de la cita y solo interrumpe a recepción cuando alguien deja de responder.
 
+> App **full frontend**: cero base de datos, cero servidor. Todo corre en el
+> browser. Se abre con `npm run dev` y listo.
+
 ---
 
 ## Qué es real y qué está simulado
@@ -13,17 +16,17 @@ Esta distinción importa, así que va primero.
 
 | Pieza | Estado |
 |---|---|
-| Motor de reglas | **Real.** Función pura con 20 tests, cubre idempotencia y bordes. |
-| Base de datos | **Real.** SQLite con esquema completo y transiciones validadas. |
-| Estados y alertas | **Reales.** Se calculan y persisten. |
+| Motor de reglas | **Real.** Función pura con tests, cubre idempotencia y bordes. |
+| Estados y alertas | **Reales.** Se calculan al reproducir la historia. |
 | Cálculo de riesgo | **Real.** Heurística explicable, no un modelo estadístico. |
+| Línea de tiempo reversible | **Real.** El mundo se reconstruye desde el seed y se reproduce hasta el instante pedido. |
 | Datos de pacientes | **De prueba.** 28 pacientes y 60 citas inventados. |
-| Envío por WhatsApp | **Simulado.** Los mensajes se escriben en la base y se muestran en la interfaz; no salen a ningún teléfono. |
+| Envío por WhatsApp | **Simulado.** Los mensajes viven en memoria y se muestran en la interfaz; no salen a ningún teléfono. |
+| Respuestas de pacientes | **Simuladas.** Cada paciente "responde" al recordatorio de forma determinista, derivada de su id, para que la demo cuente la historia completa. |
 | Reloj | **Virtual.** Lo mueves tú desde la línea de tiempo. |
 
-El canal de mensajería está detrás de una interfaz (`src/lib/channel.ts`). El día
-que la clínica tenga número de WhatsApp Business, se implementa otro adaptador y
-no se toca ni el motor ni el ejecutor.
+La simulación de respuestas es una suposición razonable (62 % confirma, 13 % pide
+cambio, 25 % no responde), no un dato medido. La interfaz lo dice con esas palabras.
 
 ---
 
@@ -31,20 +34,19 @@ no se toca ni el motor ni el ejecutor.
 
 ```bash
 npm install
-npm run db:seed     # crea odontoflow.db con la clínica de prueba
 npm run dev         # http://localhost:3001
 ```
 
-Si abres la aplicación sobre una base vacía, se siembra sola.
+El estado de la demo se guarda en el navegador (localStorage): puedes preparar la
+clínica en un punto, recargar y sigue ahí. `Reiniciar` la devuelve al inicio.
 
 ### Otros comandos
 
 ```bash
-npm test            # 70 tests
-npm run build       # build de producción
-npm run db:reset    # borra la base y vuelve a sembrar
-npm run reloj -- 30 # mueve el reloj a 30 h desde el inicio de la demo
-npm run reloj -- reset
+npm test            # 58 tests del dominio y el runtime
+npm run build       # build de producción (typecheck + Vite)
+npm run verificar   # recorrido de la demo de punta a punta, en consola
+npm run typecheck   # solo TypeScript
 ```
 
 ---
@@ -52,15 +54,15 @@ npm run reloj -- reset
 ## La demo en seis pasos
 
 1. **Abre la aplicación.** El reloj marca el miércoles 12 de agosto, 09:15. Arriba,
-   la plata en juego esta semana.
+   la plata en riesgo real.
 2. **Arrastra la línea de tiempo** hacia la derecha, o pulsa `Avanzar 24 h` (tecla `T`).
-   Los recordatorios salen solos, los montos cuentan hacia arriba.
-3. **Entra a Flujo.** Las tarjetas se han deslizado de "Programada" a "Recordada".
-   Nadie llamó a nadie.
+   Los recordatorios salen solos y los pacientes empiezan a confirmar: el verde crece.
+3. **Entra a Flujo.** Las tarjetas se deslizan de "Programada" a "Recordada" y a
+   "Confirmada". Nadie llamó a nadie.
 4. **Avanza otras 6 horas.** Quien no respondió cae en "Venció plazo" y aparece en
    Pendientes.
-5. **Entra a Pendientes.** Una decisión en pantalla, con la conversación real al
-   lado. Pulsa `1` para responder como el paciente: la cita queda confirmada.
+5. **Entra a Pendientes.** Una decisión en pantalla, con la conversación al lado.
+   Pulsa `1` para responder como el paciente: la cita queda confirmada.
 6. **Entra a Reglas**, cambia el primer recordatorio de 24 a 48 horas y guarda. La
    semana entera se recalcula. Es lo que demuestra que se adapta a cada clínica.
 
@@ -71,24 +73,26 @@ reconstruye y se llega al mismo estado.
 
 ## Cómo está hecho
 
-Tres piezas, en orden de importancia.
+Capas, en orden de importancia, todas pururas menos la última.
 
-**El motor de reglas** (`src/lib/engine.ts`) es una función pura: recibe el estado
-del mundo y devuelve qué acciones tocan. No toca la base, no envía nada, no lee la
-hora del sistema. Ahí vive el valor del producto y por eso es lo único con
-cobertura exigida.
+**El motor** (`src/domain/engine.ts`) es una función pura: recibe el estado del
+mundo y devuelve qué acciones tocan. No tiene efectos, no lee la hora. Ahí vive el
+valor del producto y por eso es lo más testeado.
 
-**El reloj virtual** (`src/lib/clock.ts`) es una fila en la base. Ninguna otra
-parte del código construye una fecha a partir de la hora real. Un test centinela
-recorre `src/` y falla si aparece `new Date()` sin argumentos fuera de los dos
-archivos autorizados. Sin esa regla, adelantar el tiempo dejaría de tener efecto y
-no habría demo.
+**El runtime** (`src/runtime/`) reproduce el mundo y arma el snapshot:
+- `mundo.ts` — `reproducir(cat, eventos, reglas, target)`: reconstruye desde el seed
+  y aplica el motor, las acciones del recepcionista y las respuestas simuladas hasta
+  el instante pedido. Determinista: pasar dos veces por el mismo momento da el mismo
+  estado.
+- `snapshot.ts` — `buildSnapshot(mundo, cat, reglas)`: el estado listo para pintar.
+- `horario.ts` — el reloj no cae fuera del horario de atención al avanzar.
 
-**El ejecutor** (`src/lib/executor.ts`) convierte decisiones en hechos. Su parte
-interesante es `seekTo`: como la línea de tiempo va en ambos sentidos, no se
-"deshace" nada. Se reconstruye el mundo desde el seed y se reproduce la historia
-—el motor más las acciones del recepcionista, guardadas en `user_events`— hasta el
-instante pedido. Por eso pasar dos veces por el mismo momento da el mismo estado.
+**El dominio** (`src/domain/`): motor, riesgo, transiciones, redacción de mensajes,
+el seed determinista y la simulación de pacientes.
+
+**La interfaz** (`src/store/` + `src/components/`): el estado vive en React
+(`OdontoStore`), persistido en localStorage. El mundo y el snapshot se derivan con
+`useMemo`. Los componentes solo dibujan.
 
 ### Estados de una cita
 
@@ -98,16 +102,13 @@ scheduled → reminded → confirmed → completed
                     ↘ no_response → confirmed | no_show
 ```
 
-Las transiciones no contempladas lanzan error en vez de corromper datos en
-silencio (`src/lib/transitions.ts`).
+Las transiciones no contempladas lanzan error en vez de corromper datos
+(`src/domain/transitions.ts`).
 
 ### Stack
 
-Next.js 16 · React 19 · TypeScript estricto · Tailwind 4 · Drizzle ORM sobre
-SQLite (libsql) · Zod · Vitest.
-
-> El driver es libsql y no better-sqlite3: este último no tiene binario compatible
-> con Node 23 y provoca un segfault al abrir la conexión.
+Vite · React 19 · TypeScript estricto · Tailwind 4 · Vitest. Tipografía Space
+Grotesk (display), DM Sans (cuerpo) y JetBrains Mono (datos).
 
 ---
 
