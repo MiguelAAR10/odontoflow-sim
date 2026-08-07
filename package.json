@@ -1,0 +1,42 @@
+{
+  "name": "odontoflow",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3001",
+    "build": "next build",
+    "start": "next start --port 3001",
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:cov": "vitest run --coverage",
+    "db:seed": "tsx src/db/seed.ts",
+    "db:reset": "rm -f odontoflow.db odontoflow.db-wal odontoflow.db-shm && npm run db:seed",
+    "reloj": "tsx scripts/reloj.ts",
+    "verificar": "tsx scripts/verificar.ts"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.4",
+    "date-fns": "^4.4.0",
+    "drizzle-orm": "^0.45.2",
+    "lucide-react": "^1.29.0",
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.10",
+    "typescript": "^5",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^3.2.7"
+  }
+}
