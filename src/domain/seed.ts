@@ -1,36 +1,42 @@
-import { createDb, type Db } from "./index";
-import {
-  appointments,
-  alerts,
-  clock,
-  dentists,
-  messages,
-  patients,
-  rules,
-  treatments,
-  userEvents,
-} from "./schema";
-import { DEMO_START } from "@/lib/clock";
+import type { Cita, Odontologo, Paciente, Reglas, Tratamiento } from "./tipos";
 
 /**
- * Seed determinista de la clínica.
+ * Seed determinista de la clínica de demo.
  *
- * Determinista es un requisito, no una preferencia: la línea de tiempo puede ir
- * hacia atrás, y para eso el mundo se reconstruye desde este seed y se
- * reproducen los eventos del usuario. Si el seed variara entre corridas, el
- * pasado cambiaría cada vez que se retrocede.
+ * Determinista es un requisito, no un detalle: la línea de tiempo se puede
+ * arrastrar hacia atrás, y para eso el mundo se reconstruye desde este catálogo
+ * y se reproduce la historia. Si el seed variara entre corridas, el pasado
+ * cambiaría cada vez que se retrocede.
+ *
+ * Los mismos 28 pacientes y 60 citas del seed original, ahora como objetos en
+ * memoria en vez de filas en SQLite.
  */
 
 const DAY = 86_400_000;
+const HOUR = 3_600_000;
 
-export const DENTISTS = [
+/** Miércoles 12 de agosto de 2026, 09:15. Instante en que arranca la demo. */
+export const DEMO_START = new Date(2026, 7, 12, 9, 15, 0, 0);
+
+/** Domingo 16 de agosto, 20:00. Fin del rango que cubre la línea de tiempo. */
+export const DEMO_END = new Date(2026, 7, 16, 20, 0, 0, 0);
+
+export const REGLAS_BASE: Reglas = {
+  firstReminderHours: 24,
+  secondReminderHours: 2,
+  alertAfterHours: 6,
+  clinicOpenHour: 8,
+  clinicCloseHour: 20,
+};
+
+export const DENTISTS: Odontologo[] = [
   { id: "d1", fullName: "Dra. Quispe", specialty: "Odontología general", color: "#12876A" },
   { id: "d2", fullName: "Dr. Salazar", specialty: "Endodoncia", color: "#2C6E9B" },
   { id: "d3", fullName: "Dra. Loayza", specialty: "Ortodoncia", color: "#8A5FA8" },
   { id: "d4", fullName: "Dr. Mendoza", specialty: "Implantología", color: "#B06A2C" },
 ];
 
-export const TREATMENTS = [
+export const TREATMENTS: Tratamiento[] = [
   { id: "t1", name: "Limpieza dental", durationMin: 60, priceCents: 12_000 },
   { id: "t2", name: "Endodoncia", durationMin: 90, priceCents: 45_000 },
   { id: "t3", name: "Control de brackets", durationMin: 60, priceCents: 9_000 },
@@ -55,25 +61,37 @@ const NOMBRES = [
 /** Inasistencias previas por índice de paciente. Fijo, para que el riesgo sea reproducible. */
 const NO_SHOWS: Record<number, number> = { 3: 1, 6: 1, 8: 2, 12: 1, 13: 2, 17: 1, 22: 1, 25: 2 };
 
+export interface Catalogo {
+  pacientes: Paciente[];
+  odontologos: Odontologo[];
+  tratamientos: Tratamiento[];
+  citas: Cita[];
+  reglas: Reglas;
+}
+
 type ApptSpec = {
-  day: number;      // días desde el lunes 10 de agosto
-  hour: number;     // hora decimal, 8.5 = 08:30
-  patient: number;  // índice en NOMBRES
+  day: number;
+  hour: number;
+  patient: number;
   treatment: string;
   dentist: string;
-  status: string;
+  status: Cita["status"];
 };
 
 /**
  * 60 citas repartidas alrededor del instante inicial (miércoles 12, 09:15):
- * 15 en el pasado ya cerradas, 8 en las próximas 24 h, 20 entre 24 y 72 h,
+ * 15 en el pasado ya cerradas, 8 en las próximas 24 h, 20 entre 24 y 72 h
  * y el resto en la semana siguiente.
  */
 function buildSpecs(): ApptSpec[] {
   const s: ApptSpec[] = [];
   const add = (
-    day: number, hour: number, patient: number,
-    treatment: string, dentist: string, status = "scheduled",
+    day: number,
+    hour: number,
+    patient: number,
+    treatment: string,
+    dentist: string,
+    status: Cita["status"] = "scheduled",
   ) => s.push({ day, hour, patient, treatment, dentist, status });
 
   // --- pasado: lunes 10 y martes 11 (12 atendidas, 3 ausencias) ---
@@ -156,92 +174,39 @@ function buildSpecs(): ApptSpec[] {
 /** Lunes 10 de agosto de 2026, 00:00 — origen del calendario del seed. */
 const WEEK_START = new Date(2026, 7, 10, 0, 0, 0, 0);
 
-export async function seed(db: Db): Promise<void> {
-  // limpiar en orden inverso a las dependencias
-  await db.delete(userEvents).run();
-  await db.delete(alerts).run();
-  await db.delete(messages).run();
-  await db.delete(appointments).run();
-  await db.delete(treatments).run();
-  await db.delete(dentists).run();
-  await db.delete(patients).run();
-  await db.delete(rules).run();
-  await db.delete(clock).run();
+/**
+ * Construye el catálogo base de la clínica. Puro y determinista: dos llamadas
+ * devuelven objetos distintos pero con exactamente los mismos valores.
+ */
+export function catalogoBase(): Catalogo {
+  const pacientes: Paciente[] = NOMBRES.map((fullName, i) => ({
+    id: `p${i + 1}`,
+    fullName,
+    phone: `+519${String(10_000_000 + i * 137_911).slice(0, 8)}`,
+    previousNoShows: NO_SHOWS[i] ?? 0,
+  }));
 
-  await db.insert(clock).values({ id: 1, now: DEMO_START }).run();
-  await db
-    .insert(rules)
-    .values({
-      id: 1,
-      firstReminderHours: 24,
-      secondReminderHours: 2,
-      alertAfterHours: 6,
-      clinicOpenHour: 8,
-      clinicCloseHour: 20,
-    })
-    .run();
+  const porId = new Map(TREATMENTS.map((t) => [t.id, t]));
+  const citas: Cita[] = buildSpecs().map((spec, i) => {
+    const startsAt = new Date(WEEK_START.getTime() + spec.day * DAY + Math.round(spec.hour * HOUR));
+    const dur = porId.get(spec.treatment)!.durationMin;
+    return {
+      id: `a${i + 1}`,
+      pacienteId: `p${spec.patient + 1}`,
+      odontologoId: spec.dentist,
+      tratamientoId: spec.treatment,
+      startsAt,
+      endsAt: new Date(startsAt.getTime() + dur * 60_000),
+      status: spec.status,
+      remindedAt: null,
+    };
+  });
 
-  await db
-    .insert(dentists)
-    .values(DENTISTS.map((d) => ({ ...d, active: true })))
-    .run();
-  await db.insert(treatments).values(TREATMENTS).run();
-
-  await db
-    .insert(patients)
-    .values(
-      NOMBRES.map((fullName, i) => ({
-        id: `p${i + 1}`,
-        fullName,
-        phone: `+519${String(10_000_000 + i * 137_911).slice(0, 8)}`,
-        email: null,
-        previousNoShows: NO_SHOWS[i] ?? 0,
-        notes: null,
-        createdAt: new Date(WEEK_START.getTime() - 90 * DAY),
-      })),
-    )
-    .run();
-
-  const specs = buildSpecs();
-  const byId = new Map(TREATMENTS.map((t) => [t.id, t]));
-
-  await db
-    .insert(appointments)
-    .values(
-      specs.map((s, i) => {
-        const startsAt = new Date(
-          WEEK_START.getTime() + s.day * DAY + Math.round(s.hour * 3_600_000),
-        );
-        const dur = byId.get(s.treatment)!.durationMin;
-        return {
-          id: `a${i + 1}`,
-          patientId: `p${s.patient + 1}`,
-          dentistId: s.dentist,
-          treatmentId: s.treatment,
-          startsAt,
-          endsAt: new Date(startsAt.getTime() + dur * 60_000),
-          status: s.status,
-          remindedAt: null,
-          createdAt: new Date(WEEK_START.getTime() - 7 * DAY),
-          updatedAt: new Date(WEEK_START.getTime() - 7 * DAY),
-        };
-      }),
-    )
-    .run();
-}
-
-// Ejecutable directo: npm run db:seed
-if (process.argv[1]?.endsWith("seed.ts") || process.argv[1]?.endsWith("seed.js")) {
-  const target = process.env.ODONTOFLOW_DB ?? "file:odontoflow.db";
-  createDb(target)
-    .then((database) => seed(database))
-    .then(() => {
-      console.log(
-        `Sembradas ${buildSpecs().length} citas y ${NOMBRES.length} pacientes en ${target}`,
-      );
-    })
-    .catch((e) => {
-      console.error("Falló el seed:", e);
-      process.exit(1);
-    });
+  return {
+    pacientes,
+    odontologos: DENTISTS,
+    tratamientos: TREATMENTS,
+    citas,
+    reglas: { ...REGLAS_BASE },
+  };
 }

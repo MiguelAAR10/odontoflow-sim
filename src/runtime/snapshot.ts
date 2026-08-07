@@ -1,16 +1,15 @@
-import { asc } from "drizzle-orm";
-import type { Db } from "@/db";
-import { alerts, appointments, dentists, messages, patients, rules, treatments } from "@/db/schema";
-import { getNow, DEMO_END, DEMO_START } from "./clock";
-import type { AppointmentStatus } from "./engine";
-import { riskOf, riskReason } from "./risk";
+import type { AppointmentStatus } from "@/domain/engine";
+import { riskOf, riskReason } from "@/domain/risk";
+import { DEMO_END, DEMO_START } from "@/domain/seed";
+import type { Catalogo, Reglas } from "@/domain/tipos";
+import type { Mundo } from "./mundo";
 
 /**
  * Estado completo de la clínica listo para pintar.
  *
- * Se arma en el servidor de una sola vez: la interfaz no consulta la base ni
- * calcula riesgos, solo dibuja. Así la vista no puede desviarse de lo que dice
- * el motor.
+ * Se arma en una sola pasada a partir del mundo reproducido: la interfaz no
+ * calcula riesgos ni decide nada, solo dibuja. Así la vista nunca se desvía de
+ * lo que dice el motor.
  */
 
 export type Carril = "programada" | "recordada" | "confirmada" | "vencida";
@@ -56,13 +55,7 @@ export interface Snapshot {
   ahora: number;
   inicio: number;
   fin: number;
-  reglas: {
-    firstReminderHours: number;
-    secondReminderHours: number;
-    alertAfterHours: number;
-    clinicOpenHour: number;
-    clinicCloseHour: number;
-  };
+  reglas: Reglas;
   citas: CitaVista[];
   mensajes: MensajeVista[];
   pendientes: PendienteVista[];
@@ -71,6 +64,8 @@ export interface Snapshot {
     confirmado: number;
     esperando: number;
     vencido: number;
+    /** plata de las citas que de verdad pueden caerse: suma de soles × riesgo */
+    enRiesgo: number;
     citasVivas: number;
     confirmadasSinLlamar: number;
     recordatoriosEnviados: number;
@@ -86,32 +81,21 @@ function carrilDe(status: AppointmentStatus): Carril | null {
   if (status === "reminded") return "recordada";
   if (status === "confirmed") return "confirmada";
   if (status === "no_response" || status === "reschedule_requested") return "vencida";
-  return null; // completed / no_show / cancelled: fuera del tablero
+  return null;
 }
 
-export async function buildSnapshot(db: Db): Promise<Snapshot> {
-  const ahora = await getNow(db);
+export function buildSnapshot(mundo: Mundo, cat: Catalogo, reglas: Reglas): Snapshot {
+  const ahora = mundo.ahora;
 
-  const [cs, ps, ds, ts, ms, als, rs] = await Promise.all([
-    db.select().from(appointments).orderBy(asc(appointments.startsAt)).all(),
-    db.select().from(patients).all(),
-    db.select().from(dentists).all(),
-    db.select().from(treatments).all(),
-    db.select().from(messages).orderBy(asc(messages.sentAt)).all(),
-    db.select().from(alerts).all(),
-    db.select().from(rules).all(),
-  ]);
+  const pacientes = new Map(cat.pacientes.map((p) => [p.id, p]));
+  const odontologos = new Map(cat.odontologos.map((d) => [d.id, d]));
+  const tratamientos = new Map(cat.tratamientos.map((t) => [t.id, t]));
 
-  const pacientes = new Map(ps.map((p) => [p.id, p]));
-  const odontologos = new Map(ds.map((d) => [d.id, d]));
-  const tratamientos = new Map(ts.map((t) => [t.id, t]));
-  const r = rs[0];
-
-  const citas: CitaVista[] = cs.map((c) => {
-    const p = pacientes.get(c.patientId);
-    const d = odontologos.get(c.dentistId);
-    const t = tratamientos.get(c.treatmentId);
-    const status = c.status as AppointmentStatus;
+  const citas: CitaVista[] = mundo.citas.map((c) => {
+    const p = pacientes.get(c.pacienteId);
+    const d = odontologos.get(c.odontologoId);
+    const t = tratamientos.get(c.tratamientoId);
+    const status = c.status;
     const previas = p?.previousNoShows ?? 0;
 
     const entrada = { status, startsAt: c.startsAt, previousNoShows: previas, now: ahora };
@@ -141,10 +125,9 @@ export async function buildSnapshot(db: Db): Promise<Snapshot> {
   });
 
   const vivas = citas.filter((c) => c.activa);
-  const suma = (f: (c: CitaVista) => boolean) =>
-    vivas.filter(f).reduce((s, c) => s + c.soles, 0);
+  const suma = (f: (c: CitaVista) => boolean) => vivas.filter(f).reduce((s, c) => s + c.soles, 0);
 
-  const abiertas = als.filter((a) => !a.resolvedAt);
+  const abiertas = mundo.alertas.filter((a) => !a.resolvedAt);
   const porCita = new Map(citas.map((c) => [c.id, c]));
 
   const pendientes: PendienteVista[] = [
@@ -162,7 +145,6 @@ export async function buildSnapshot(db: Db): Promise<Snapshot> {
       })),
   ]
     .filter((p) => porCita.get(p.citaId)?.activa)
-    // primero lo que más plata pone en riesgo y antes ocurre
     .sort((a, b) => {
       const ca = porCita.get(a.citaId)!;
       const cb = porCita.get(b.citaId)!;
@@ -171,22 +153,16 @@ export async function buildSnapshot(db: Db): Promise<Snapshot> {
       return pb - pa;
     });
 
-  const recordatorios = ms.filter((m) => m.kind.startsWith("reminder"));
+  const recordatorios = mundo.mensajes.filter((m) => m.kind.startsWith("reminder"));
   const confirmadas = vivas.filter((c) => c.status === "confirmed");
 
   return {
     ahora: ahora.getTime(),
     inicio: DEMO_START.getTime(),
     fin: DEMO_END.getTime(),
-    reglas: {
-      firstReminderHours: r?.firstReminderHours ?? 24,
-      secondReminderHours: r?.secondReminderHours ?? 2,
-      alertAfterHours: r?.alertAfterHours ?? 6,
-      clinicOpenHour: r?.clinicOpenHour ?? 8,
-      clinicCloseHour: r?.clinicCloseHour ?? 20,
-    },
+    reglas,
     citas,
-    mensajes: ms.map((m) => ({
+    mensajes: mundo.mensajes.map((m) => ({
       id: m.id,
       citaId: m.appointmentId,
       entrante: m.direction === "inbound",
@@ -200,14 +176,12 @@ export async function buildSnapshot(db: Db): Promise<Snapshot> {
       confirmado: suma((c) => c.status === "confirmed"),
       esperando: suma((c) => c.status === "scheduled" || c.status === "reminded"),
       vencido: suma((c) => c.carril === "vencida"),
+      enRiesgo: Math.round(vivas.reduce((s, c) => s + c.soles * c.riesgo, 0)),
       citasVivas: vivas.length,
       confirmadasSinLlamar: confirmadas.length,
       recordatoriosEnviados: recordatorios.length,
-      // plata que volvió porque el paciente confirmó tras un recordatorio
-      rescatado: confirmadas
-        .filter((c) => c.remindedAt !== null)
-        .reduce((s, c) => s + c.soles, 0),
+      rescatado: confirmadas.filter((c) => c.remindedAt !== null).reduce((s, c) => s + c.soles, 0),
     },
-    clinica: { odontologos: ds.length, pacientes: ps.length },
+    clinica: { odontologos: cat.odontologos.length, pacientes: cat.pacientes.length },
   };
 }

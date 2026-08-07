@@ -6,12 +6,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
-    // better-sqlite3 es un módulo nativo y no sobrevive al pool de workers
-    // por defecto: se cierra el canal IPC a mitad de la suite.
-    pool: "forks",
-    poolOptions: { forks: { singleFork: true } },
     coverage: {
-      include: ["src/lib/engine.ts", "src/lib/risk.ts", "src/lib/transitions.ts"],
+      include: ["src/domain/**/*.ts", "src/runtime/**/*.ts"],
       thresholds: { lines: 90, functions: 90, branches: 80 },
     },
   },
