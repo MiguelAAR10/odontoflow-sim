@@ -1,4 +1,4 @@
-import type { Cita, Odontologo, Paciente, Reglas, Tratamiento } from "./tipos";
+import type { Catalogo, Cita, Odontologo, Paciente, Reglas, Tratamiento } from "./tipos";
 
 /**
  * Seed determinista de la clínica de demo.
@@ -60,14 +60,6 @@ const NOMBRES = [
 
 /** Inasistencias previas por índice de paciente. Fijo, para que el riesgo sea reproducible. */
 const NO_SHOWS: Record<number, number> = { 3: 1, 6: 1, 8: 2, 12: 1, 13: 2, 17: 1, 22: 1, 25: 2 };
-
-export interface Catalogo {
-  pacientes: Paciente[];
-  odontologos: Odontologo[];
-  tratamientos: Tratamiento[];
-  citas: Cita[];
-  reglas: Reglas;
-}
 
 type ApptSpec = {
   day: number;

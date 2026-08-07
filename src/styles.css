@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+/*
+  Sistema de diseño de OdontoFlow.
+
+  Mismo principio que la versión original: el verde es el único acento y solo
+  aparece en la acción principal y el elemento activo. Rojo y ámbar están
+  reservados al estado de una cita. La paleta de estado está validada para
+  contraste y daltonismo (separación ΔE 17.9 en el par más difícil); el ámbar
+  queda por debajo de 3:1 contra el fondo claro, así que nunca va solo: siempre
+  lleva su etiqueta escrita.
+
+  Tipografía: Space Grotesk para rótulos y cifras grandes (geométrica, con
+  carácter técnico), DM Sans para el cuerpo y JetBrains Mono para todo dato
+  tabular, que así alinea en columnas.
+*/
+
+@theme {
+  --color-bg: #edf0ee;
+  --color-panel: #ffffff;
+  --color-panel-2: #f7f9f8;
+  --color-panel-3: #ecf0ee;
+
+  --color-line: #dde3e0;
+  --color-line-2: #c2cbc7;
+  --color-line-3: #9faaa5;
+
+  --color-ink: #0c1310;
+  --color-ink-2: #47524e;
+  --color-ink-3: #78837e;
+  --color-ink-4: #9ea9a4;
+
+  --color-dark: #13211d;
+  --color-dark-2: #1c2e28;
+  --color-dark-3: #2a403a;
+  --color-dim: #8fa39c;
+  --color-dim-2: #61776f;
+
+  --color-ok: #12876a;
+  --color-ok-soft: #e2f0eb;
+  --color-ok-line: #9ccbbe;
+
+  --color-wait: #e0a509;
+  --color-wait-ink: #8a6600;
+  --color-wait-soft: #fbf2da;
+  --color-wait-line: #e4c88a;
+
+  --color-late: #be2e2e;
+  --color-late-soft: #f9e8e6;
+  --color-late-line: #e7afa9;
+
+  --font-display: "Space Grotesk", "Futura", "Avenir Next", sans-serif;
+  --font-sans: "DM Sans", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* En escritorio la ventana no se mueve: es una aplicación, no una página. */
+@media (min-width: 768px) {
+  body {
+    overflow: hidden;
+  }
+}
+
+/* Todo dato numérico va en monospace para que las columnas alineen. */
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.01em;
+}
+
+.rotulo {
+  font-family: var(--font-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.display {
+  font-family: var(--font-display);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ok);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+/* Entrada direccional de las vistas: el movimiento dice hacia dónde vas. */
+@keyframes entra-derecha {
+  from { opacity: 0; transform: translateX(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes entra-izquierda {
+  from { opacity: 0; transform: translateX(-14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes cae {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes late {
+  0%, 100% { transform: scale(1); }
+  42% { transform: scale(1.32); }
+}
+@keyframes pulso-Verde {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-ok) 35%, transparent); }
+  100% { box-shadow: 0 0 0 7px transparent; }
+}
+
+.anim-derecha { animation: entra-derecha 0.26s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+.anim-izquierda { animation: entra-izquierda 0.26s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+.anim-cae { animation: cae 0.22s ease both; }
+.anim-late { animation: late 0.5s ease; }
+.anim-pulso { animation: pulso-Verde 0.6s ease-out; }
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: var(--color-line-2); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-line-3); }
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

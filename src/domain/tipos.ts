@@ -85,3 +85,12 @@ export interface Alerta {
   createdAt: Date;
   resolvedAt: Date | null;
 }
+
+/** Catálogo completo de la clínica, como sale del seed. */
+export interface Catalogo {
+  pacientes: Paciente[];
+  odontologos: Odontologo[];
+  tratamientos: Tratamiento[];
+  citas: Cita[];
+  reglas: Reglas;
+}

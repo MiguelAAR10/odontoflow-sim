@@ -8,7 +8,7 @@ import {
   type PlantillaCita,
 } from "@/domain/channel";
 import { respuestaDe } from "@/domain/paciente-sim";
-import { DEMO_END, DEMO_START } from "@/domain/seed";
+import { DEMO_START } from "@/domain/seed";
 import type { Alerta, Catalogo, Cita, Mensaje, Reglas, UserEvent, UserEventKind } from "@/domain/tipos";
 import { clampReloj } from "./horario";
 
