@@ -14,7 +14,8 @@ export type AppointmentStatus =
   | "no_response"
   | "completed"
   | "no_show"
-  | "cancelled";
+  | "cancelled"
+  | "recovered";
 
 export type ReminderKind = "reminder_24h" | "reminder_2h";
 
@@ -76,7 +77,7 @@ export function evaluate(input: EvaluateInput): Action[] {
     raisedAlerts.some((a) => a.appointmentId === appointmentId && a.kind === kind);
 
   for (const appt of appointments) {
-    // Las citas cerradas no generan ninguna acción.
+    // Las citas cerradas o recuperadas no generan ninguna acción.
     if (
       appt.status === "completed" ||
       appt.status === "no_show" ||
@@ -121,7 +122,7 @@ export function evaluate(input: EvaluateInput): Action[] {
 
     // 4 · cierre de la cita una vez pasada su hora de fin
     if (appt.endsAt.getTime() <= now.getTime()) {
-      if (appt.status === "confirmed") {
+      if (appt.status === "confirmed" || appt.status === "recovered") {
         actions.push({ type: "mark_completed", appointmentId: appt.id });
       } else {
         // scheduled, reminded, no_response o reschedule_requested que ya pasaron

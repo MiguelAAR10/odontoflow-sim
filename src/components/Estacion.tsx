@@ -1,46 +1,55 @@
 import { useCallback, useEffect, useState } from "react";
 import { useOdonto } from "@/store/OdontoStore";
-import type { Carril } from "@/runtime/snapshot";
 import type { UserEventKind } from "@/domain/tipos";
 import { Timeline } from "./Timeline";
-import { VistaIngresos } from "./VistaIngresos";
-import { VistaFlujo } from "./VistaFlujo";
-import { VistaPendientes } from "./VistaPendientes";
+import { VistaOperacion } from "./VistaOperacion";
+import { VistaAgenda } from "./VistaAgenda";
+import { VistaPacientes } from "./VistaPacientes";
+import { VistaDoctores } from "./VistaDoctores";
+import { VistaLaboratorios } from "./VistaLaboratorios";
+import { VistaActividad } from "./VistaActividad";
 import { VistaReglas } from "./VistaReglas";
 import { Toast } from "./Toast";
-import { Diente, Flujo, Ingresos, Pendientes, Reglas, Reloj } from "./Icons";
+import {
+  Actividad as IconoActividad,
+  Diente,
+  Doctores,
+  Flujo,
+  Ingresos,
+  Laboratorio,
+  Pacientes,
+  Reglas,
+  Reloj,
+} from "./Icons";
 import { DIA3, hhmm, usePulso } from "./util";
 
 /**
  * Estación de recepción.
  *
- * Shell de aplicación: barra superior con navegación (sticky) y controles de
- * tiempo (sticky); debajo, la línea de tiempo y el área de trabajo. Cada vista
- * explica por sí sola qué hacer en ella. Un toast confirma cada acción.
+ * Shell de aplicación: barra superior carbón con navegación por dominios
+ * (Operación, Agenda, Pacientes, Doctores, Laboratorios) y controles de tiempo
+ * persistentes. La navegación se basa en dominios, no en herramientas.
  */
 
-type Vista = "resumen" | "flujo" | "acciones" | "config";
+type Vista = "operacion" | "agenda" | "actividad" | "pacientes" | "doctores" | "laboratorios" | "config";
 
-const ORDEN: Vista[] = ["resumen", "flujo", "acciones", "config"];
+const ORDEN: Vista[] = ["operacion", "agenda", "actividad", "pacientes", "doctores", "laboratorios", "config"];
 const VISTAS_VALIDAS = new Set(ORDEN);
-
-const FILTROS: Record<string, { etiqueta: string; carriles: Carril[] }> = {
-  confirmada: { etiqueta: "confirmadas", carriles: ["confirmada"] },
-  esperando: { etiqueta: "por confirmar", carriles: ["programada", "recordada"] },
-  vencida: { etiqueta: "con plazo vencido", carriles: ["vencida"] },
-};
 
 const MENSAJE_EVENTO: Record<UserEventKind, string> = {
   apply_suggestion: "Acción registrada",
   snooze: "Cita pospuesta",
   patient_confirm: "Confirmación registrada",
   patient_reschedule: "Reagendamiento registrado",
+  patient_cancel: "Cancelación registrada · espacio liberado",
+  offer_waitlist: "Oferta enviada a la lista de espera",
+  recover_slot: "Cita recuperada desde la lista de espera",
 };
 
 const vistaInicialDeUrl = (): Vista => {
-  if (typeof window === "undefined") return "resumen";
+  if (typeof window === "undefined") return "operacion";
   const v = new URLSearchParams(window.location.search).get("vista");
-  return v && VISTAS_VALIDAS.has(v as Vista) ? (v as Vista) : "resumen";
+  return v && VISTAS_VALIDAS.has(v as Vista) ? (v as Vista) : "operacion";
 };
 
 export function Estacion({ onSalir }: { onSalir: () => void }) {
@@ -48,21 +57,22 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
     snapshot,
     nowMs,
     version,
+    proximoEventoMs,
     moverReloj,
     avanzarHoras,
+    irASiguienteEvento,
     registrarEvento,
     reiniciar,
     guardarReglas,
   } = useOdonto();
 
   const [vista, setVista] = useState<Vista>(vistaInicialDeUrl);
-  const [filtro, setFiltro] = useState<keyof typeof FILTROS | null>(null);
   const [seleccion, setSeleccion] = useState<string | null>(null);
   const [direccion, setDireccion] = useState<"derecha" | "izquierda">("derecha");
   const [confirmando, setConfirmando] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const cola = snapshot.pendientes.length;
+  const cola = snapshot.operaciones.length;
   const pulso = usePulso(version);
 
   const irA = useCallback(
@@ -80,6 +90,7 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
 
   const seek = useCallback((ms: number) => moverReloj(Math.round(ms)), [moverReloj]);
   const avanzar = useCallback((h: number) => avanzarHoras(h), [avanzarHoras]);
+  const siguienteEv = useCallback(() => irASiguienteEvento(), [irASiguienteEvento]);
 
   const evento = useCallback(
     (id: string, kind: UserEventKind) => {
@@ -93,17 +104,8 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
   const abrir = useCallback(
     (id: string) => {
       setSeleccion(id);
-      irA("acciones");
     },
-    [irA],
-  );
-
-  const filtrar = useCallback(
-    (seg: keyof typeof FILTROS) => {
-      setFiltro(seg);
-      irA("flujo");
-    },
-    [irA],
+    [],
   );
 
   const guardarConToast = useCallback(
@@ -114,7 +116,7 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
     [guardarReglas],
   );
 
-  // Atajos: T avanza un día, 1-4 navega, Escape sube de nivel.
+  // Atajos: T avanza un día, 1-6 navega dominios, Escape limpia selección.
   useEffect(() => {
     const manejar = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName?.match(/INPUT|TEXTAREA|SELECT/)) return;
@@ -122,7 +124,11 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
         e.preventDefault();
         avanzar(24);
       }
-      const navIndex = ["1", "2", "3", "4"].indexOf(e.key);
+      if (e.key === "e" || e.key === "E") {
+        e.preventDefault();
+        siguienteEv();
+      }
+      const navIndex = ["1", "2", "3", "4", "5", "6", "7"].indexOf(e.key);
       if (navIndex >= 0) {
         e.preventDefault();
         irA(ORDEN[navIndex]);
@@ -130,13 +136,12 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
       if (e.key === "Escape") {
         e.preventDefault();
         if (seleccion) setSeleccion(null);
-        else if (filtro) setFiltro(null);
-        else irA("resumen");
+        else irA("operacion");
       }
     };
     window.addEventListener("keydown", manejar);
     return () => window.removeEventListener("keydown", manejar);
-  }, [avanzar, filtro, irA, seleccion]);
+  }, [avanzar, siguienteEv, irA, seleccion]);
 
   useEffect(() => {
     if (!confirmando) return;
@@ -144,42 +149,46 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
     return () => clearTimeout(t);
   }, [confirmando]);
 
-  const enFoco = filtro ? FILTROS[filtro].carriles : null;
-
   const nav: { clave: Vista; texto: string; textoCorto: string; Icono: typeof Ingresos; contador?: number }[] = [
-    { clave: "resumen", texto: "Resumen", textoCorto: "Resumen", Icono: Ingresos },
-    { clave: "flujo", texto: "Flujo", textoCorto: "Flujo", Icono: Flujo },
-    { clave: "acciones", texto: "Acciones", textoCorto: "Acción", Icono: Pendientes, contador: cola },
+    { clave: "operacion", texto: "Operación", textoCorto: "Operación", Icono: Ingresos, contador: cola },
+    { clave: "agenda", texto: "Agenda", textoCorto: "Agenda", Icono: Flujo },
+    { clave: "actividad", texto: "Actividad", textoCorto: "Actividad", Icono: IconoActividad },
+    { clave: "pacientes", texto: "Pacientes", textoCorto: "Pacientes", Icono: Pacientes },
+    { clave: "doctores", texto: "Doctores", textoCorto: "Doctores", Icono: Doctores },
+    { clave: "laboratorios", texto: "Laboratorios", textoCorto: "Labos", Icono: Laboratorio },
     { clave: "config", texto: "Configuración", textoCorto: "Ajustes", Icono: Reglas },
   ];
 
   const titulos: Record<Vista, string> = {
-    resumen: "Resumen de la clínica",
-    flujo: "Flujo de confirmación",
-    acciones: "Acciones requeridas",
+    operacion: "Centro de operaciones",
+    agenda: "Agenda de citas",
+    actividad: "Registro de actividad",
+    pacientes: "Pacientes",
+    doctores: "Doctores",
+    laboratorios: "Laboratorios",
     config: "Configuración del sistema",
   };
 
   return (
     <div className="flex min-h-screen flex-col md:h-screen md:overflow-hidden">
-      {/* barra superior */}
-      <header className="sticky top-0 z-20 shrink-0 border-b border-line bg-panel/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-2.5 sm:px-6">
+      {/* barra superior — carbón */}
+      <header className="sticky top-0 z-20 shrink-0 border-b border-dark-3 bg-dark text-[#e8efec]">
+        <div className="mx-auto flex w-full max-w-7xl items-center gap-3 px-4 py-2.5 sm:px-6">
           <button
             onClick={onSalir}
             className="flex shrink-0 items-center gap-2.5 text-left transition hover:opacity-80"
             aria-label="Volver al inicio"
           >
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-dark text-[#e8efec]">
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-azul text-white">
               <Diente size={16} />
             </span>
             <span className="hidden leading-tight sm:block">
-              <span className="rotulo block text-[10px] leading-none text-ink-3">OdontoFlow</span>
-              <span className="block text-[12.5px] font-semibold tracking-[-0.01em]">San Borja</span>
+              <span className="rotulo block text-[10px] leading-none text-dim">OdontoFlow</span>
+              <span className="block text-[12.5px] font-semibold tracking-[-0.01em]">Clínica San Borja</span>
             </span>
           </button>
 
-          <nav className="mx-auto flex items-center gap-0.5 overflow-x-auto rounded-xl bg-panel-2 p-1 sm:gap-1">
+          <nav className="mx-auto flex items-center gap-0.5 overflow-x-auto rounded-xl bg-dark-2 p-1 sm:gap-1">
             {nav.map(({ clave, texto, textoCorto, Icono, contador }) => {
               const activo = vista === clave;
               return (
@@ -189,13 +198,13 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
                   aria-current={activo ? "page" : undefined}
                   className={`relative flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13.5px] font-medium transition sm:px-3 ${
                     activo
-                      ? "bg-panel text-ink shadow-sm"
-                      : "text-ink-3 hover:text-ink-2"
+                      ? "bg-azul text-white"
+                      : "text-dim hover:text-[#e8efec] hover:bg-dark-3"
                   }`}
                 >
-                  <Icono className={activo ? "opacity-100" : "opacity-70"} size={15} />
-                  <span className="hidden sm:inline">{texto}</span>
-                  <span className="sm:hidden">{textoCorto}</span>
+                  <Icono className={activo ? "opacity-100" : "opacity-80"} size={15} />
+                  <span className="hidden md:inline">{texto}</span>
+                  <span className="md:hidden">{textoCorto}</span>
                   {contador !== undefined && contador > 0 && (
                     <span className="tabular rounded-full bg-late px-1.5 text-[11px] font-semibold text-white">
                       {contador}
@@ -206,17 +215,17 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
             })}
           </nav>
 
-          <div className="flex shrink-0 items-center gap-2.5 border-l border-line pl-3">
-            <Reloj className="text-ink-4" />
+          <div className="flex shrink-0 items-center gap-2.5 border-l border-dark-3 pl-3">
+            <Reloj className="text-dim" />
             <span className="leading-tight">
               <span
                 className={`tabular block text-[14px] font-semibold transition-colors duration-300 ${
-                  pulso ? "text-ok-text" : ""
+                  pulso ? "text-ok" : ""
                 }`}
               >
                 {hhmm(nowMs)}
               </span>
-              <span className="block text-[11px] text-ink-3">
+              <span className="block text-[11px] text-dim">
                 {DIA3[new Date(nowMs).getDay()]} {new Date(nowMs).getDate()} ago
               </span>
             </span>
@@ -226,13 +235,15 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
 
       {/* controles de tiempo */}
       <div className="sticky top-[57px] z-10 shrink-0 border-b border-line bg-panel-2/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-2 px-4 py-2 sm:px-6">
+        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-2 px-4 py-2 sm:px-6">
           <button
-            onClick={() => avanzar(24)}
-            className="flex items-center gap-2 rounded-lg bg-dark px-4 py-2 text-[13.5px] font-semibold text-white transition hover:opacity-90"
+            onClick={siguienteEv}
+            disabled={proximoEventoMs === null}
+            className="flex items-center gap-2 rounded-lg bg-azul px-4 py-2 text-[13.5px] font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            title="Saltar al próximo instante en que el sistema hace algo (recordatorio, respuesta, alerta, recuperación)"
           >
-            Avanzar 24 h
-            <kbd className="tabular rounded border border-white/30 px-1 text-[10px] opacity-70">T</kbd>
+            Siguiente evento
+            <kbd className="tabular rounded border border-white/30 px-1 text-[10px] opacity-70">E</kbd>
           </button>
           <div className="flex overflow-hidden rounded-lg border border-line-2 bg-panel">
             {[1, 6].map((h) => (
@@ -245,19 +256,17 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
               </button>
             ))}
           </div>
+          <button
+            onClick={() => avanzar(24)}
+            className="flex items-center gap-1.5 rounded-lg border border-line-2 bg-panel px-3 py-2 text-[12.5px] font-medium text-ink-2 transition hover:bg-panel-3"
+          >
+            +24 h
+            <kbd className="tabular rounded border border-line-3 px-1 text-[10px] opacity-70">T</kbd>
+          </button>
 
-          {filtro && (
-            <span className="flex items-center gap-1.5 rounded-lg border border-line-2 bg-panel py-1 pr-1 pl-2.5 text-[12.5px] font-medium">
-              Filtro: {FILTROS[filtro].etiqueta}
-              <button
-                onClick={() => setFiltro(null)}
-                aria-label="Quitar filtro"
-                className="tabular rounded px-1 text-ink-3 hover:bg-late-soft hover:text-late"
-              >
-                ✕
-              </button>
-            </span>
-          )}
+          <span className="ml-2 hidden items-center gap-1.5 rounded-lg border border-wait-line bg-wait-soft px-2.5 py-1.5 text-[11.5px] font-medium text-wait-text sm:flex">
+            Datos ficticios de demostración
+          </span>
 
           <div className="ml-auto flex items-center gap-2">
             {confirmando ? (
@@ -265,7 +274,6 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
                 <button
                   onClick={() => {
                     setConfirmando(false);
-                    setFiltro(null);
                     setSeleccion(null);
                     reiniciar();
                     setToast("Simulación reiniciada");
@@ -297,28 +305,28 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
 
       {/* área de trabajo */}
       <main className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
-          <h1 className="display mb-5 text-[22px] font-bold tracking-[-0.02em] sm:text-[26px]">
-            {titulos[vista]}
-          </h1>
+        <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+            <h1 className="display text-[22px] font-bold tracking-[-0.02em] sm:text-[26px]">
+              {titulos[vista]}
+            </h1>
+            {/* etiqueta móvil de datos ficticios */}
+            <span className="flex items-center gap-1.5 rounded-lg border border-wait-line bg-wait-soft px-2.5 py-1 text-[11.5px] font-medium text-wait-text sm:hidden">
+              Datos ficticios de demostración
+            </span>
+          </div>
           <div key={vista} className={direccion === "derecha" ? "anim-derecha" : "anim-izquierda"}>
-            {vista === "resumen" && (
-              <VistaIngresos snapshot={snapshot} onAbrir={abrir} onFiltrar={filtrar} />
+            {vista === "operacion" && (
+              <VistaOperacion snapshot={snapshot} onAbrir={abrir} onEvento={evento} onIrA={irA} />
             )}
-            {vista === "flujo" && (
-              <VistaFlujo snapshot={snapshot} filtro={enFoco} onAbrir={abrir} />
+            {vista === "agenda" && (
+              <VistaAgenda snapshot={snapshot} seleccion={seleccion} onAbrir={abrir} onEvento={evento} />
             )}
-            {vista === "acciones" && (
-              <VistaPendientes
-                snapshot={snapshot}
-                seleccion={seleccion}
-                onEvento={evento}
-                onIrA={irA}
-              />
-            )}
-            {vista === "config" && (
-              <VistaReglas snapshot={snapshot} onGuardar={guardarConToast} />
-            )}
+            {vista === "actividad" && <VistaActividad snapshot={snapshot} />}
+            {vista === "pacientes" && <VistaPacientes snapshot={snapshot} />}
+            {vista === "doctores" && <VistaDoctores snapshot={snapshot} onAbrir={abrir} />}
+            {vista === "laboratorios" && <VistaLaboratorios snapshot={snapshot} />}
+            {vista === "config" && <VistaReglas snapshot={snapshot} onGuardar={guardarConToast} />}
           </div>
         </div>
       </main>

@@ -11,6 +11,7 @@ import { catalogoBase, DEMO_START, REGLAS_BASE } from "@/domain/seed";
 import type { Reglas, UserEvent, UserEventKind } from "@/domain/tipos";
 import { reproducir } from "@/runtime/mundo";
 import { buildSnapshot, type Snapshot } from "@/runtime/snapshot";
+import { siguienteEvento } from "@/runtime/siguiente-evento";
 import { clampReloj, dentroDeHorario } from "@/runtime/horario";
 
 /**
@@ -72,8 +73,11 @@ export interface OdontoAPI {
   nowMs: number;
   /** sube con cada acción; sirve para disparar feedback visual (el latido del reloj) */
   version: number;
+  /** próximo instante (ms) en que el mundo cambia, o null si no hay más eventos */
+  proximoEventoMs: number | null;
   moverReloj: (ms: number) => void;
   avanzarHoras: (h: number) => void;
+  irASiguienteEvento: () => void;
   registrarEvento: (citaId: string, kind: UserEventKind) => void;
   reiniciar: () => void;
   guardarReglas: (r: Reglas) => void;
@@ -116,6 +120,21 @@ export function OdontoProvider({ children }: { children: ReactNode }) {
     [tocar],
   );
 
+  const irASiguienteEvento = useCallback(() => {
+    setEstado((e) => {
+      const eventosActuales: UserEvent[] = e.eventos.map((ev) => ({
+        at: new Date(ev.atMs),
+        appointmentId: ev.appointmentId,
+        kind: ev.kind,
+        seq: ev.seq,
+      }));
+      const prox = siguienteEvento(cat, eventosActuales, e.reglas, e.nowMs);
+      if (prox === null) return e;
+      return { ...e, nowMs: clampReloj(new Date(prox)).getTime() };
+    });
+    tocar();
+  }, [cat, tocar]);
+
   const registrarEvento = useCallback(
     (citaId: string, kind: UserEventKind) => {
       setEstado((e) => ({
@@ -155,12 +174,19 @@ export function OdontoProvider({ children }: { children: ReactNode }) {
 
   const snapshot = useMemo(() => buildSnapshot(mundo, cat, estado.reglas), [mundo, cat, estado.reglas]);
 
+  const proximoEventoMs = useMemo(
+    () => siguienteEvento(cat, eventos, estado.reglas, estado.nowMs),
+    [cat, eventos, estado.reglas, estado.nowMs],
+  );
+
   const api: OdontoAPI = {
     snapshot,
     nowMs: estado.nowMs,
     version,
+    proximoEventoMs,
     moverReloj,
     avanzarHoras,
+    irASiguienteEvento,
     registrarEvento,
     reiniciar,
     guardarReglas,

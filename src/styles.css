@@ -29,29 +29,42 @@
   --color-ink-3: #5a6661;
   --color-ink-4: #6b7771;
 
+  /* Carbón para cabeceras y superficies de navegación: apariencia empresarial */
   --color-dark: #14221d;
   --color-dark-2: #1d3029;
   --color-dark-3: #2c4239;
   --color-dim: #90a29b;
   --color-dim-2: #62776f;
 
-  --color-ok: #138a6c;
+  /* Azul como acento funcional: CTA principal, nav activo, foco */
+  --color-azul: #2b6cb0;
+  --color-azul-text: #1d4f8a;
+  --color-azul-soft: #e3eef8;
+  --color-azul-line: #aac6e6;
+  --color-azul-strong: #1e4e8c;
+
+  /* Estados reconocibles de una cita */
+  --color-ok: #138a6c;          /* confirmado */
   --color-ok-text: #0c6a51;
   --color-ok-soft: #e1f0eb;
   --color-ok-line: #9ccbbe;
 
-  --color-wait: #d99800;
+  --color-wait: #d99800;        /* pendiente de respuesta */
   --color-wait-text: #8a6600;
   --color-wait-ink: #8a6600;
   --color-wait-soft: #fbf1d8;
   --color-wait-line: #e4c88a;
 
-  --color-late: #b62d2d;
+  --color-late: #b62d2d;        /* riesgo / vencido */
   --color-late-soft: #f8e7e5;
   --color-late-line: #e6aaa4;
 
-  --color-azul: #2b6cb0;
-  --color-azul-soft: #e3eef8;
+  --color-cancel: #8a8f8c;      /* cancelado */
+  --color-cancel-soft: #ecefee;
+  --color-cancel-line: #c4c9c6;
+
+  --color-recup: #2b6cb0;       /* recuperado: azul, igual que el acento */
+  --color-recup-soft: #e3eef8;
 
   --font-display: "Plus Jakarta Sans", "Avenir Next", "Segoe UI", system-ui, sans-serif;
   --font-sans: "Plus Jakarta Sans", "Avenir Next", "Segoe UI", system-ui, sans-serif;
@@ -94,7 +107,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-ok);
+  outline: 2px solid var(--color-azul);
   outline-offset: 2px;
   border-radius: 4px;
 }

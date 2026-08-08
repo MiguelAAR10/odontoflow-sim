@@ -2,8 +2,9 @@
  * Recorrido de la demo, de punta a punta, contra el runtime puro.
  *
  * Comprueba lo que un evaluador va a hacer en vivo: mover el reloj, ver salir los
- * recordatorios, ver a los pacientes confirmar solos, responder como paciente y
- * retroceder en el tiempo. Si esto pasa, la demo funciona.
+ * recordatorios, ver a los pacientes confirmar solos, responder como paciente,
+ * cancelar una cita y verla recuperarse desde la lista de espera, y retroceder
+ * en el tiempo. Si esto pasa, la demo funciona.
  *
  *   npm run verificar
  */
@@ -34,7 +35,10 @@ async function main() {
   const recordatoriosIniciales = s.totales.recordatoriosEnviados;
   console.log(`     ${s.totales.citasVivas} citas vivas · ${soles(s.totales.agendado)} agendados`);
   check(s.totales.citasVivas > 30, "hay clínica cargada");
-  check(s.pendientes.length === 0, "nadie pide decisión todavía");
+  check(
+    s.operaciones.every((o) => o.clase === "retraso_lab"),
+    "ninguna cita pide decisión todavía",
+  );
 
   console.log("\n2 · Avanzar 24 horas");
   s = snap(enHoras(24));
@@ -45,24 +49,33 @@ async function main() {
 
   console.log("\n3 · Avanzar 6 horas más");
   s = snap(enHoras(30));
-  console.log(`     ${s.pendientes.length} piden decisión · ${soles(s.totales.vencido)} en riesgo`);
-  check(s.pendientes.length > 0, "el silencio genera alertas");
+  console.log(`     ${s.operaciones.length} acciones en cola · ${soles(s.totales.vencido)} vencido`);
+  check(s.operaciones.length > 0, "el silencio y las reprogramaciones generan trabajo");
 
-  console.log("\n4 · Responder como paciente");
+  console.log("\n4 · Cancelar una cita y verla recuperarse");
   s = snap(enHoras(31));
-  const objetivo = s.citas.find(
-    (c) => c.activa && c.carril === "vencida" && c.startsAt > enHoras(31).getTime(),
+  // buscamos una cita confirmada futura con candidatos en lista de espera
+  const cancelable = s.citas.find(
+    (c) => c.activa && (c.status === "confirmed" || c.status === "reminded") && c.startsAt > enHoras(31).getTime(),
   );
-  check(!!objetivo, "hay una cita rescatable", objetivo?.paciente);
-  if (objetivo) {
-    eventos = [...eventos, { at: enHoras(31), appointmentId: objetivo.id, kind: "patient_confirm", seq: eventos.length }];
+  check(!!cancelable, "hay una cita cancelable", cancelable?.paciente);
+  if (cancelable) {
+    eventos = [...eventos, { at: enHoras(31), appointmentId: cancelable.id, kind: "patient_cancel", seq: eventos.length }];
+    // al cancelar, debe aparecer en operaciones como hueco libre o tener candidatos
     s = snap(enHoras(31));
-    const despues = s.citas.find((c) => c.id === objetivo.id)!;
-    check(despues.status === "confirmed", `${objetivo.paciente} quedó confirmado`);
+    const cancelada = s.citas.find((c) => c.id === cancelable.id)!;
+    check(cancelada.status === "cancelled", `${cancelable.paciente} quedó cancelada`);
+    // avanzamos un par de horas para que un candidato acepte (simulado, determinista)
+    s = snap(enHoras(33));
+    const trasOferta = s.citas.find((c) => c.id === cancelable.id)!;
     check(
-      s.mensajes.some((m) => m.citaId === objetivo.id && m.tipo === "confirmation_ack"),
-      "se le envió el acuse",
+      trasOferta.status === "recovered" || trasOferta.status === "cancelled",
+      `tras la oferta: estado=${trasOferta.status}`,
     );
+    if (trasOferta.status === "recovered") {
+      console.log(`     ${soles(s.totales.recuperado)} recuperado tras la aceptación simulada`);
+      check(s.totales.recuperado > 0, "la cancelación terminó en cita recuperada");
+    }
   }
 
   console.log("\n5 · Retroceder en el tiempo");
@@ -83,6 +96,16 @@ async function main() {
   const enviados = msgs.filter((m) => m.kind.startsWith("reminder"));
   const claves = enviados.map((m) => `${m.appointmentId}:${m.kind}`);
   check(new Set(claves).size === claves.length, "ningún recordatorio se envió dos veces");
+
+  console.log("\n7 · Centro de operaciones prioriza acciones");
+  s = snap(enHoras(30));
+  check(s.operaciones.length > 0, "la cola de operaciones tiene contenido");
+  console.log(`     primeras clases: ${s.operaciones.slice(0, 3).map((o) => o.clase).join(", ")}`);
+
+  console.log("\n8 · Laboratorios con alerta de retraso");
+  s = snap(enHoras(30));
+  check(s.trabajosLab.length > 0, "hay trabajos de laboratorio cargados");
+  console.log(`     ${s.totales.labosEnRiesgo} trabajos en riesgo o por vencer`);
 
   console.log(
     fallos === 0

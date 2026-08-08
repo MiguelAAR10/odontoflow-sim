@@ -19,6 +19,8 @@ const COLOR: Record<string, string> = {
   recordada: "var(--color-wait)",
   vencida: "var(--color-late)",
   programada: "var(--color-ink-4)",
+  recuperada: "var(--color-azul)",
+  cancelada: "var(--color-cancel)",
 };
 
 export function Timeline({

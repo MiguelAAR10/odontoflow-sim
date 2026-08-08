@@ -50,3 +50,18 @@ export function textoReprogramacion(c: PlantillaCita): string {
     `un horario que te acomode.`
   );
 }
+
+export function textoOfertaHueco(c: PlantillaCita): string {
+  return (
+    `Hola ${nombrePila(c.paciente)}, se liberó un espacio de ${c.tratamiento.toLowerCase()} ` +
+    `el ${DIAS[c.startsAt.getDay()]} ${c.startsAt.getDate()} a las ${hhmm(c.startsAt)} ` +
+    `con ${c.odontologo}.\n\nResponde 1 si lo quieres y lo reservamos.`
+  );
+}
+
+export function textoRecuperacion(c: PlantillaCita): string {
+  return (
+    `Listo ${nombrePila(c.paciente)}, el espacio es tuyo. Te esperamos el ` +
+    `${DIAS[c.startsAt.getDay()]} ${c.startsAt.getDate()} a las ${hhmm(c.startsAt)} con ${c.odontologo}.`
+  );
+}

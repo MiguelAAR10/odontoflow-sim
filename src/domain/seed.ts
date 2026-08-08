@@ -1,4 +1,15 @@
-import type { Catalogo, Cita, Odontologo, Paciente, Reglas, Tratamiento } from "./tipos";
+import type {
+  CandidatoListaEspera,
+  Catalogo,
+  Cita,
+  DiaSemana,
+  Laboratorio,
+  Odontologo,
+  Paciente,
+  Reglas,
+  TrabajoLaboratorio,
+  Tratamiento,
+} from "./tipos";
 
 /**
  * Seed determinista de la clínica de demo.
@@ -30,11 +41,19 @@ export const REGLAS_BASE: Reglas = {
 };
 
 export const DENTISTS: Odontologo[] = [
-  { id: "d1", fullName: "Dra. Quispe", specialty: "Odontología general", color: "#12876A" },
-  { id: "d2", fullName: "Dr. Salazar", specialty: "Endodoncia", color: "#2C6E9B" },
-  { id: "d3", fullName: "Dra. Loayza", specialty: "Ortodoncia", color: "#8A5FA8" },
-  { id: "d4", fullName: "Dr. Mendoza", specialty: "Implantología", color: "#B06A2C" },
+  // Dra. Quispe: atención general. Cubre todos los días en que abre la clínica,
+  // incluido el domingo de guardia, por eso es el "doctor de reasignación".
+  { id: "d1", fullName: "Dra. Quispe", specialty: "Odontología general", color: "#2b6cb0", diasAtiende: [0, 1, 2, 3, 4, 5, 6] },
+  // Dr. Salazar: endodoncia — solo lunes, miércoles y viernes
+  { id: "d2", fullName: "Dr. Salazar", specialty: "Endodoncia", color: "#8A5FA8", diasAtiende: [1, 3, 5] },
+  // Dra. Loayza: ortodoncia — martes, jueves y sábado
+  { id: "d3", fullName: "Dra. Loayza", specialty: "Ortodoncia", color: "#0e8a7c", diasAtiende: [2, 4, 6] },
+  // Dr. Mendoza: implantología — lunes a viernes
+  { id: "d4", fullName: "Dr. Mendoza", specialty: "Implantología", color: "#B06A2C", diasAtiende: [1, 2, 3, 4, 5] },
 ];
+
+/** Días que atiende cada doctor, para validar el seed al construir el catálogo. */
+const DIAS_DOCTOR = new Map(DENTISTS.map((d) => [d.id, new Set(d.diasAtiende)]));
 
 export const TREATMENTS: Tratamiento[] = [
   { id: "t1", name: "Limpieza dental", durationMin: 60, priceCents: 12_000 },
@@ -167,6 +186,43 @@ function buildSpecs(): ApptSpec[] {
 const WEEK_START = new Date(2026, 7, 10, 0, 0, 0, 0);
 
 /**
+ * Lista de espera: pacientes que pidieron turno y aceptarían un hueco que se
+ * libere. Determinista, como todo el seed. Cada uno declara qué tratamiento
+ * busca, qué odontólogo prefiere y en qué ventana horaria le sirve.
+ */
+function buildListaEspera(): CandidatoListaEspera[] {
+  return [
+    { id: "w1", pacienteId: "p5", tratamientoId: "t1", odontologoId: "d1", desde: new Date(2026, 7, 12, 8, 0), hasta: new Date(2026, 7, 16, 20, 0), createdAt: new Date(2026, 7, 11, 10, 0) },
+    { id: "w2", pacienteId: "p9", tratamientoId: "t4", odontologoId: null, desde: new Date(2026, 7, 12, 8, 0), hasta: new Date(2026, 7, 15, 20, 0), createdAt: new Date(2026, 7, 11, 11, 30) },
+    { id: "w3", pacienteId: "p14", tratamientoId: "t2", odontologoId: "d2", desde: new Date(2026, 7, 13, 8, 0), hasta: new Date(2026, 7, 15, 20, 0), createdAt: new Date(2026, 7, 11, 15, 0) },
+    { id: "w4", pacienteId: "p22", tratamientoId: "t6", odontologoId: "d4", desde: new Date(2026, 7, 12, 8, 0), hasta: new Date(2026, 7, 14, 20, 0), createdAt: new Date(2026, 7, 10, 9, 0) },
+    { id: "w5", pacienteId: "p17", tratamientoId: null, odontologoId: null, desde: new Date(2026, 7, 12, 8, 0), hasta: null, createdAt: new Date(2026, 7, 11, 17, 0) },
+  ];
+}
+
+export const LABORATORIOS: Laboratorio[] = [
+  { id: "l1", nombre: "Dental Plus", contacto: "987 654 321" },
+  { id: "l2", nombre: "Lab Sur", contacto: "955 112 233" },
+  { id: "l3", nombre: "Prótesis Andina", contacto: "944 887 766" },
+];
+
+/**
+ * Trabajos de laboratorio en seguimiento. Deterministas: cada uno tiene su
+ * fecha de envío, su promesa y su estado. La alerta de retraso se calcula en
+ * runtime comparando `prometidoEn` con el reloj virtual.
+ */
+function buildTrabajosLab(): TrabajoLaboratorio[] {
+  return [
+    { id: "lab1", pacienteId: "p4", tratamientoId: "t5", laboratorioId: "l1", odontologoId: "d4", enviadoEn: new Date(2026, 7, 4, 10, 0), prometidoEn: new Date(2026, 7, 12, 18, 0), estado: "en_proceso", responsable: "Ana (recepción)" },
+    { id: "lab2", pacienteId: "p8", tratamientoId: "t5", laboratorioId: "l2", odontologoId: "d4", enviadoEn: new Date(2026, 7, 6, 11, 0), prometidoEn: new Date(2026, 7, 13, 12, 0), estado: "en_proceso", responsable: "Ana (recepción)" },
+    { id: "lab3", pacienteId: "p11", tratamientoId: "t6", laboratorioId: "l1", odontologoId: "d4", enviadoEn: new Date(2026, 7, 8, 9, 30), prometidoEn: new Date(2026, 7, 14, 17, 0), estado: "en_proceso", responsable: "Carlos (recepción)" },
+    { id: "lab4", pacienteId: "p2", tratamientoId: "t5", laboratorioId: "l3", odontologoId: "d4", enviadoEn: new Date(2026, 7, 9, 16, 0), prometidoEn: new Date(2026, 7, 14, 13, 0), estado: "ajuste", responsable: "Carlos (recepción)" },
+    { id: "lab5", pacienteId: "p15", tratamientoId: "t3", laboratorioId: "l2", odontologoId: "d3", enviadoEn: new Date(2026, 7, 5, 10, 0), prometidoEn: new Date(2026, 7, 11, 12, 0), estado: "recibido", responsable: "Ana (recepción)" },
+    { id: "lab6", pacienteId: "p19", tratamientoId: "t5", laboratorioId: "l1", odontologoId: "d4", enviadoEn: new Date(2026, 7, 7, 11, 0), prometidoEn: new Date(2026, 7, 12, 12, 0), estado: "en_proceso", responsable: "Ana (recepción)" },
+  ];
+}
+
+/**
  * Construye el catálogo base de la clínica. Puro y determinista: dos llamadas
  * devuelven objetos distintos pero con exactamente los mismos valores.
  */
@@ -179,19 +235,44 @@ export function catalogoBase(): Catalogo {
   }));
 
   const porId = new Map(TREATMENTS.map((t) => [t.id, t]));
-  const citas: Cita[] = buildSpecs().map((spec, i) => {
+
+  // Construye las citas y, si alguna cae en un día que su doctor no atiende,
+  // la reasigna a un doctor válido que no solape en ese día/hora. d1 (general)
+  // atiende todos los días, así que siempre hay un destino posible. Esto hace
+  // que el seed sea coherente con los `diasAtiende` declarados, sin romper el
+  // conteo de citas ni el determinismo.
+  const citas: Cita[] = [];
+  const ocupado: Map<string, Array<{ ini: number; fin: number }>> = new Map(
+    DENTISTS.map((d) => [d.id, []]),
+  );
+  const solapa = (doc: string, ini: number, fin: number) =>
+    ocupado.get(doc)!.some((b) => ini < b.fin && fin > b.ini);
+
+  buildSpecs().forEach((spec, i) => {
     const startsAt = new Date(WEEK_START.getTime() + spec.day * DAY + Math.round(spec.hour * HOUR));
     const dur = porId.get(spec.treatment)!.durationMin;
-    return {
+    const endsAt = new Date(startsAt.getTime() + dur * 60_000);
+    const dia = startsAt.getDay() as DiaSemana;
+
+    let doctor = spec.dentist;
+    if (!DIAS_DOCTOR.get(doctor)!.has(dia) || solapa(doctor, startsAt.getTime(), endsAt.getTime())) {
+      // primer doctor que atiende ese día y no solape; d1 siempre es candidato
+      doctor =
+        DENTISTS.find((d) => DIAS_DOCTOR.get(d.id)!.has(dia) && !solapa(d.id, startsAt.getTime(), endsAt.getTime()))
+          ?.id ?? doctor;
+    }
+    ocupado.get(doctor)!.push({ ini: startsAt.getTime(), fin: endsAt.getTime() });
+
+    citas.push({
       id: `a${i + 1}`,
       pacienteId: `p${spec.patient + 1}`,
-      odontologoId: spec.dentist,
+      odontologoId: doctor,
       tratamientoId: spec.treatment,
       startsAt,
-      endsAt: new Date(startsAt.getTime() + dur * 60_000),
+      endsAt,
       status: spec.status,
       remindedAt: null,
-    };
+    });
   });
 
   return {
@@ -200,5 +281,8 @@ export function catalogoBase(): Catalogo {
     tratamientos: TREATMENTS,
     citas,
     reglas: { ...REGLAS_BASE },
+    listaEspera: buildListaEspera(),
+    laboratorios: LABORATORIOS,
+    trabajosLab: buildTrabajosLab(),
   };
 }

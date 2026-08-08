@@ -77,3 +77,45 @@ export const Reloj = ({ size = 14, className }: Props) =>
     size,
     className,
   );
+
+export const Pacientes = ({ size = 14, className }: Props) =>
+  trazo(
+    <>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3.5 19.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5" />
+      <path d="M16 5.5a3 3 0 010 5.8M16.5 14.5c2.4.3 4 2.2 4 5" />
+    </>,
+    size,
+    className,
+  );
+
+export const Doctores = ({ size = 14, className }: Props) =>
+  trazo(
+    <>
+      <path d="M12 3.5l6 3v4.5c0 3.8-2.6 6.9-6 8-3.4-1.1-6-4.2-6-8V6.5l6-3z" />
+      <path d="M9.5 11.5l1.8 1.8 3.4-3.6" />
+    </>,
+    size,
+    className,
+  );
+
+export const Laboratorio = ({ size = 14, className }: Props) =>
+  trazo(
+    <>
+      <path d="M9 3v5.5L5 16.5C4.4 17.7 5.3 19 6.6 19h10.8c1.3 0 2.2-1.3 1.6-2.5L15 8.5V3" />
+      <path d="M8 3h8" />
+      <path d="M7.5 14.5h9" />
+    </>,
+    size,
+    className,
+  );
+
+export const Actividad = ({ size = 14, className }: Props) =>
+  trazo(
+    <>
+      <path d="M5 5v14h14" />
+      <path d="M8.5 15l3-3.5 2.5 2 3.5-4.5" />
+    </>,
+    size,
+    className,
+  );

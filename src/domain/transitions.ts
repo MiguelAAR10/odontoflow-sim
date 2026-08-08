@@ -13,9 +13,11 @@ const LEGAL: Record<AppointmentStatus, AppointmentStatus[]> = {
   confirmed: ["completed", "no_show", "cancelled"],
   reschedule_requested: ["scheduled", "confirmed", "no_show", "cancelled"],
   no_response: ["confirmed", "reschedule_requested", "no_show", "cancelled"],
+  // una cita cancelada puede recuperarse: alguien de la lista de espera tomó el hueco
+  cancelled: ["recovered"],
+  recovered: ["completed", "no_show"],
   completed: [],
   no_show: [],
-  cancelled: [],
 };
 
 export class IllegalTransitionError extends Error {
