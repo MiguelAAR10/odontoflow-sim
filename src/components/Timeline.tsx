@@ -18,7 +18,7 @@ const COLOR: Record<string, string> = {
   confirmada: "var(--color-ok)",
   recordada: "var(--color-wait)",
   vencida: "var(--color-late)",
-  programada: "var(--color-dark-3)",
+  programada: "var(--color-ink-4)",
 };
 
 export function Timeline({
@@ -76,8 +76,8 @@ export function Timeline({
   }).filter((d) => d.getTime() >= inicio && d.getTime() <= fin);
 
   return (
-    <div className="flex shrink-0 items-center gap-3 bg-dark px-4 py-2.5">
-      <span className="rotulo hidden text-[8.5px] whitespace-nowrap text-dim-2 sm:block">
+    <div className="flex items-center gap-3 px-4 py-2 sm:px-6">
+      <span className="rotulo hidden whitespace-nowrap text-[10px] text-ink-4 sm:block">
         Línea de tiempo
       </span>
 
@@ -105,12 +105,12 @@ export function Timeline({
             onSeek(ahora - salto * 3_600_000);
           }
         }}
-        className="relative h-7 flex-1 cursor-ew-resize touch-none select-none"
+        className="relative h-8 flex-1 cursor-ew-resize touch-none select-none"
       >
         {/* raíl */}
-        <div className="absolute inset-x-0 top-3 h-[3px] rounded-full bg-dark-3" />
+        <div className="absolute inset-x-0 top-3.5 h-[3px] rounded-full bg-line" />
         <div
-          className="absolute top-3 left-0 h-[3px] rounded-full bg-ok-line transition-[width] duration-300"
+          className="absolute top-3.5 left-0 h-[3px] rounded-full bg-ok transition-[width] duration-300"
           style={{ width: `${pct(visible)}%` }}
         />
 
@@ -118,10 +118,10 @@ export function Timeline({
         {dias.map((d) => (
           <span
             key={d.getTime()}
-            className="absolute top-[7px] h-2.5 w-px bg-dark-3"
+            className="absolute top-2 h-3 w-px bg-line-3"
             style={{ left: `${pct(d.getTime())}%` }}
           >
-            <b className="tabular absolute top-3 left-1/2 -translate-x-1/2 text-[8.5px] font-normal text-dim-2">
+            <b className="tabular absolute top-3.5 left-1/2 -translate-x-1/2 text-[10px] font-normal text-ink-4">
               {DIA3[d.getDay()]}
             </b>
           </span>
@@ -131,27 +131,27 @@ export function Timeline({
         {citas.map((c) => (
           <span
             key={c.id}
-            className="absolute top-[3px] h-[7px] w-[3px] rounded-[1px] transition-colors duration-300"
+            className="absolute top-[4px] h-[7px] w-[3px] rounded-[1px] transition-colors duration-300"
             style={{
               left: `${pct(c.startsAt)}%`,
-              background: c.activa ? COLOR[c.carril] : "var(--color-dark-3)",
-              opacity: c.activa ? 1 : 0.5,
+              background: c.activa ? COLOR[c.carril] : "var(--color-line-2)",
+              opacity: c.activa ? 1 : 0.6,
             }}
           />
         ))}
 
         {/* pomo */}
         <span
-          className={`absolute top-[7px] -ml-2 h-4 w-4 rounded-full border-[3px] border-ok bg-white shadow-[0_2px_6px_rgba(0,0,0,0.35)] transition-transform ${
+          className={`absolute top-2 -ml-2 h-4 w-4 rounded-full border-[3px] border-ok bg-white shadow-[0_1px_4px_rgba(0,0,0,0.18)] transition-transform ${
             arrastre !== null ? "scale-115" : ""
           } ${pulso ? "anim-pulso" : ""}`}
           style={{ left: `${pct(visible)}%` }}
         />
       </div>
 
-      <span className="tabular w-[6.5rem] text-right text-[12.5px] whitespace-nowrap text-[#e8efec]">
+      <span className="tabular w-[7rem] text-right text-[13px] whitespace-nowrap text-ink-2">
         {DIA3[new Date(visible).getDay()]} {new Date(visible).getDate()}{" "}
-        <b className="font-semibold text-ok-line">{hhmm(visible)}</b>
+        <b className="font-semibold text-ok-text">{hhmm(visible)}</b>
       </span>
     </div>
   );

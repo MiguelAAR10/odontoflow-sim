@@ -7,62 +7,43 @@ import { VistaIngresos } from "./VistaIngresos";
 import { VistaFlujo } from "./VistaFlujo";
 import { VistaPendientes } from "./VistaPendientes";
 import { VistaReglas } from "./VistaReglas";
+import { Toast } from "./Toast";
 import { Diente, Flujo, Ingresos, Pendientes, Reglas, Reloj } from "./Icons";
-import { DIA3, hhmm, soles, useContador, usePulso, useSubida } from "./util";
+import { DIA3, hhmm, usePulso } from "./util";
 
 /**
  * Estación de recepción.
  *
- * Chrome de aplicación, no página web: la ventana no hace scroll, la barra de
- * estado con los cuatro montos es persistente y solo cambia el área de trabajo.
- * En un sistema clínico el contexto no puede perderse al navegar.
+ * Shell de aplicación: barra superior con navegación (sticky) y controles de
+ * tiempo (sticky); debajo, la línea de tiempo y el área de trabajo. Cada vista
+ * explica por sí sola qué hacer en ella. Un toast confirma cada acción.
  */
 
-type Vista = "ingresos" | "flujo" | "pendientes" | "reglas";
+type Vista = "resumen" | "flujo" | "acciones" | "config";
 
-const ORDEN: Vista[] = ["ingresos", "flujo", "pendientes", "reglas"];
+const ORDEN: Vista[] = ["resumen", "flujo", "acciones", "config"];
 const VISTAS_VALIDAS = new Set(ORDEN);
 
 const FILTROS: Record<string, { etiqueta: string; carriles: Carril[] }> = {
   confirmada: { etiqueta: "confirmadas", carriles: ["confirmada"] },
-  esperando: { etiqueta: "esperando respuesta", carriles: ["programada", "recordada"] },
-  vencida: { etiqueta: "venció el plazo", carriles: ["vencida"] },
+  esperando: { etiqueta: "por confirmar", carriles: ["programada", "recordada"] },
+  vencida: { etiqueta: "con plazo vencido", carriles: ["vencida"] },
+};
+
+const MENSAJE_EVENTO: Record<UserEventKind, string> = {
+  apply_suggestion: "Acción registrada",
+  snooze: "Cita pospuesta",
+  patient_confirm: "Confirmación registrada",
+  patient_reschedule: "Reagendamiento registrado",
 };
 
 const vistaInicialDeUrl = (): Vista => {
-  if (typeof window === "undefined") return "ingresos";
+  if (typeof window === "undefined") return "resumen";
   const v = new URLSearchParams(window.location.search).get("vista");
-  return v && VISTAS_VALIDAS.has(v as Vista) ? (v as Vista) : "ingresos";
+  return v && VISTAS_VALIDAS.has(v as Vista) ? (v as Vista) : "resumen";
 };
 
-function Metrica({
-  rotulo,
-  valor,
-  nota,
-  tono,
-}: {
-  rotulo: string;
-  valor: number;
-  nota: string;
-  tono?: "ok" | "late";
-}) {
-  const animado = useContador(valor);
-  return (
-    <div className="min-w-0 border-r border-line px-3 py-2.5 last:border-r-0 sm:px-4">
-      <div className="rotulo truncate text-[9px] text-ink-3">{rotulo}</div>
-      <div
-        className={`tabular text-[21px] leading-tight font-semibold tracking-[-0.045em] sm:text-[27px] ${
-          tono === "ok" ? "text-ok" : tono === "late" ? "text-late" : ""
-        }`}
-      >
-        {soles(animado)}
-      </div>
-      <div className="truncate text-[10.5px] text-ink-3">{nota}</div>
-    </div>
-  );
-}
-
-export function Estacion() {
+export function Estacion({ onSalir }: { onSalir: () => void }) {
   const {
     snapshot,
     nowMs,
@@ -79,9 +60,9 @@ export function Estacion() {
   const [seleccion, setSeleccion] = useState<string | null>(null);
   const [direccion, setDireccion] = useState<"derecha" | "izquierda">("derecha");
   const [confirmando, setConfirmando] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const cola = snapshot.pendientes.length;
-  const latido = useSubida(cola);
   const pulso = usePulso(version);
 
   const irA = useCallback(
@@ -104,6 +85,7 @@ export function Estacion() {
     (id: string, kind: UserEventKind) => {
       setSeleccion(null);
       registrarEvento(id, kind);
+      setToast(MENSAJE_EVENTO[kind]);
     },
     [registrarEvento],
   );
@@ -111,7 +93,7 @@ export function Estacion() {
   const abrir = useCallback(
     (id: string) => {
       setSeleccion(id);
-      irA("pendientes");
+      irA("acciones");
     },
     [irA],
   );
@@ -124,7 +106,15 @@ export function Estacion() {
     [irA],
   );
 
-  // Atajos globales: T avanza un día, Escape sube un nivel.
+  const guardarConToast = useCallback(
+    (r: Parameters<typeof guardarReglas>[0]) => {
+      guardarReglas(r);
+      setToast("Parámetros guardados");
+    },
+    [guardarReglas],
+  );
+
+  // Atajos: T avanza un día, 1-4 navega, Escape sube de nivel.
   useEffect(() => {
     const manejar = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName?.match(/INPUT|TEXTAREA|SELECT/)) return;
@@ -132,134 +122,133 @@ export function Estacion() {
         e.preventDefault();
         avanzar(24);
       }
+      const navIndex = ["1", "2", "3", "4"].indexOf(e.key);
+      if (navIndex >= 0) {
+        e.preventDefault();
+        irA(ORDEN[navIndex]);
+      }
       if (e.key === "Escape") {
         e.preventDefault();
         if (seleccion) setSeleccion(null);
         else if (filtro) setFiltro(null);
-        else irA("ingresos");
+        else irA("resumen");
       }
     };
     window.addEventListener("keydown", manejar);
     return () => window.removeEventListener("keydown", manejar);
   }, [avanzar, filtro, irA, seleccion]);
 
-  // El confirm de reiniciar se cancela solo si el usuario se arrepiente a tiempo.
   useEffect(() => {
     if (!confirmando) return;
-    const t = setTimeout(() => setConfirmando(false), 3200);
+    const t = setTimeout(() => setConfirmando(false), 3400);
     return () => clearTimeout(t);
   }, [confirmando]);
 
   const enFoco = filtro ? FILTROS[filtro].carriles : null;
-  const alcance = snapshot.citas.filter(
-    (c) => c.activa && (!enFoco || enFoco.includes(c.carril)),
-  );
 
-  const nav: { clave: Vista; texto: string; Icono: typeof Ingresos; contador?: number }[] = [
-    { clave: "ingresos", texto: "Ingresos", Icono: Ingresos, contador: snapshot.totales.citasVivas },
-    { clave: "flujo", texto: "Flujo", Icono: Flujo, contador: snapshot.totales.citasVivas },
-    { clave: "pendientes", texto: "Pendientes", Icono: Pendientes, contador: cola },
-    { clave: "reglas", texto: "Reglas", Icono: Reglas },
+  const nav: { clave: Vista; texto: string; textoCorto: string; Icono: typeof Ingresos; contador?: number }[] = [
+    { clave: "resumen", texto: "Resumen", textoCorto: "Resumen", Icono: Ingresos },
+    { clave: "flujo", texto: "Flujo", textoCorto: "Flujo", Icono: Flujo },
+    { clave: "acciones", texto: "Acciones", textoCorto: "Acción", Icono: Pendientes, contador: cola },
+    { clave: "config", texto: "Configuración", textoCorto: "Ajustes", Icono: Reglas },
   ];
 
-  return (
-    <div className="grid min-h-screen grid-cols-1 overflow-x-hidden md:h-screen md:grid-cols-[198px_1fr]">
-      {/* barra lateral */}
-      <aside className="flex min-h-0 min-w-0 flex-row items-center gap-2 overflow-x-auto bg-dark text-[#e8efec] md:flex-col md:items-stretch md:gap-0 md:overflow-visible">
-        <div className="flex items-center gap-2.5 px-3.5 py-3">
-          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#e8efec] text-dark">
-            <Diente size={14} />
-          </span>
-          <span className="min-w-0">
-            <span className="rotulo block text-[12.5px] whitespace-nowrap">Odontoflow</span>
-            <span className="block text-[10px] text-dim-2">San Borja</span>
-          </span>
-        </div>
+  const titulos: Record<Vista, string> = {
+    resumen: "Resumen de la clínica",
+    flujo: "Flujo de confirmación",
+    acciones: "Acciones requeridas",
+    config: "Configuración del sistema",
+  };
 
-        <nav className="flex gap-0.5 px-2 md:flex-col md:pt-1">
-          <span className="rotulo hidden px-2 pt-2.5 pb-1.5 text-[9px] text-dim-2 md:block">Citas</span>
-          {nav.map(({ clave, texto, Icono, contador }, i) => {
-            const activo = vista === clave;
-            const esCola = clave === "pendientes";
-            return (
-              <span key={clave} className="contents">
-                {i === 3 && (
-                  <span className="rotulo hidden px-2 pt-3 pb-1.5 text-[9px] text-dim-2 md:block">
-                    Clínica
-                  </span>
-                )}
+  return (
+    <div className="flex min-h-screen flex-col md:h-screen md:overflow-hidden">
+      {/* barra superior */}
+      <header className="sticky top-0 z-20 shrink-0 border-b border-line bg-panel/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-2.5 sm:px-6">
+          <button
+            onClick={onSalir}
+            className="flex shrink-0 items-center gap-2.5 text-left transition hover:opacity-80"
+            aria-label="Volver al inicio"
+          >
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-dark text-[#e8efec]">
+              <Diente size={16} />
+            </span>
+            <span className="hidden leading-tight sm:block">
+              <span className="rotulo block text-[10px] leading-none text-ink-3">OdontoFlow</span>
+              <span className="block text-[12.5px] font-semibold tracking-[-0.01em]">San Borja</span>
+            </span>
+          </button>
+
+          <nav className="mx-auto flex items-center gap-0.5 overflow-x-auto rounded-xl bg-panel-2 p-1 sm:gap-1">
+            {nav.map(({ clave, texto, textoCorto, Icono, contador }) => {
+              const activo = vista === clave;
+              return (
                 <button
+                  key={clave}
                   onClick={() => irA(clave)}
                   aria-current={activo ? "page" : undefined}
-                  className={`relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[12.5px] whitespace-nowrap transition ${
+                  className={`relative flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13.5px] font-medium transition sm:px-3 ${
                     activo
-                      ? "bg-dark-3 font-semibold text-white"
-                      : "text-dim hover:bg-dark-2 hover:text-[#e8efec]"
+                      ? "bg-panel text-ink shadow-sm"
+                      : "text-ink-3 hover:text-ink-2"
                   }`}
                 >
-                  {activo && (
-                    <span className="absolute top-1.5 -left-2 bottom-1.5 w-[2.5px] rounded-r-[2px] bg-ok-line" />
-                  )}
-                  <Icono className={activo ? "opacity-100" : "opacity-60"} />
-                  {texto}
+                  <Icono className={activo ? "opacity-100" : "opacity-70"} size={15} />
+                  <span className="hidden sm:inline">{texto}</span>
+                  <span className="sm:hidden">{textoCorto}</span>
                   {contador !== undefined && contador > 0 && (
-                    <span
-                      className={`tabular ml-auto text-[11px] ${
-                        esCola
-                          ? `rounded-full bg-late px-1.5 text-white ${latido ? "anim-late" : ""}`
-                          : activo
-                            ? "text-ok-line"
-                            : "text-dim-2"
-                      }`}
-                    >
+                    <span className="tabular rounded-full bg-late px-1.5 text-[11px] font-semibold text-white">
                       {contador}
                     </span>
                   )}
                 </button>
+              );
+            })}
+          </nav>
+
+          <div className="flex shrink-0 items-center gap-2.5 border-l border-line pl-3">
+            <Reloj className="text-ink-4" />
+            <span className="leading-tight">
+              <span
+                className={`tabular block text-[14px] font-semibold transition-colors duration-300 ${
+                  pulso ? "text-ok-text" : ""
+                }`}
+              >
+                {hhmm(nowMs)}
               </span>
-            );
-          })}
-        </nav>
-
-        <div className="ml-auto hidden flex-col gap-1.5 border-t border-dark-3 px-3.5 py-3 md:mt-auto md:ml-0 md:flex">
-          <div className="flex items-baseline text-[11px] text-dim-2">
-            Odontólogos
-            <b className="tabular ml-auto font-semibold text-dim">{snapshot.clinica.odontologos}</b>
+              <span className="block text-[11px] text-ink-3">
+                {DIA3[new Date(nowMs).getDay()]} {new Date(nowMs).getDate()} ago
+              </span>
+            </span>
           </div>
-          <div className="flex items-baseline text-[11px] text-dim-2">
-            Pacientes
-            <b className="tabular ml-auto font-semibold text-dim">{snapshot.clinica.pacientes}</b>
-          </div>
-          <div className="flex items-baseline text-[11px] text-dim-2">
-            Mensajes del motor
-            <b className="tabular ml-auto font-semibold text-dim">{snapshot.mensajes.length}</b>
-          </div>
-          <span className="mt-1 inline-flex items-center gap-1.5 text-[10px] text-ok-line">
-            <i className="h-[5px] w-[5px] rounded-full bg-ok-line" />
-            canal simulado
-          </span>
-          <span className="inline-flex items-center gap-1.5 text-[10px] text-dim-2">
-            <i className="h-[5px] w-[5px] rounded-full bg-dim-2" />
-            respuestas simuladas
-          </span>
         </div>
-      </aside>
+      </header>
 
-      {/* zona de trabajo */}
-      <div className="flex min-h-0 min-w-0 flex-col">
-        <header className="flex shrink-0 flex-wrap items-center gap-x-3.5 gap-y-2 border-b border-line bg-panel px-4 py-2 md:h-[50px] md:flex-nowrap md:py-0">
-          <h1 className="display text-[15px] font-medium">
-            {{
-              ingresos: "Ingresos",
-              flujo: "Flujo de confirmación",
-              pendientes: "Pendientes",
-              reglas: "Reglas",
-            }[vista]}
-          </h1>
+      {/* controles de tiempo */}
+      <div className="sticky top-[57px] z-10 shrink-0 border-b border-line bg-panel-2/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-2 px-4 py-2 sm:px-6">
+          <button
+            onClick={() => avanzar(24)}
+            className="flex items-center gap-2 rounded-lg bg-dark px-4 py-2 text-[13.5px] font-semibold text-white transition hover:opacity-90"
+          >
+            Avanzar 24 h
+            <kbd className="tabular rounded border border-white/30 px-1 text-[10px] opacity-70">T</kbd>
+          </button>
+          <div className="flex overflow-hidden rounded-lg border border-line-2 bg-panel">
+            {[1, 6].map((h) => (
+              <button
+                key={h}
+                onClick={() => avanzar(h)}
+                className="border-r border-line px-3 py-2 text-[12.5px] text-ink-2 transition last:border-r-0 hover:bg-panel-3"
+              >
+                +{h} h
+              </button>
+            ))}
+          </div>
 
-          {filtro && vista !== "reglas" && (
-            <span className="flex items-center gap-1.5 rounded-md border border-line-2 bg-panel-3 py-0.5 pr-1 pl-2.5 text-[11.5px] font-semibold">
-              {FILTROS[filtro].etiqueta}
+          {filtro && (
+            <span className="flex items-center gap-1.5 rounded-lg border border-line-2 bg-panel py-1 pr-1 pl-2.5 text-[12.5px] font-medium">
+              Filtro: {FILTROS[filtro].etiqueta}
               <button
                 onClick={() => setFiltro(null)}
                 aria-label="Quitar filtro"
@@ -270,49 +259,7 @@ export function Estacion() {
             </span>
           )}
 
-          {vista !== "reglas" && (
-            <span className="tabular hidden text-[11.5px] text-ink-3 sm:inline">
-              {alcance.length} citas · {soles(alcance.reduce((s, c) => s + c.soles, 0))}
-            </span>
-          )}
-
-          <div className="-mx-4 flex w-[calc(100%+2rem)] min-w-0 items-center gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:ml-auto md:w-auto md:overflow-visible md:px-0 md:pb-0 md:gap-2.5">
-            <div className="flex items-center gap-2 border-r border-line pr-2.5">
-              <Reloj className="text-ink-4" />
-              <span className="leading-tight">
-                <span
-                  className={`tabular block text-[14px] font-semibold transition-colors duration-300 ${
-                    pulso ? "text-ok" : ""
-                  }`}
-                >
-                  {hhmm(nowMs)}
-                </span>
-                <span className="block text-[10.5px] text-ink-3">
-                  {DIA3[new Date(nowMs).getDay()]} {new Date(nowMs).getDate()} ago
-                </span>
-              </span>
-            </div>
-
-            <div className="flex overflow-hidden rounded-md border border-line-2">
-              {[1, 6].map((h) => (
-                <button
-                  key={h}
-                  onClick={() => avanzar(h)}
-                  className="border-r border-line px-2.5 py-1.5 text-[11.5px] text-ink-2 transition last:border-r-0 hover:bg-panel-3"
-                >
-                  +{h} h
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => avanzar(24)}
-              className="flex items-center gap-2 rounded-md bg-dark px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition hover:opacity-88"
-            >
-              Avanzar 24 h
-              <kbd className="tabular rounded border border-white/35 px-1 text-[9.5px] opacity-60">T</kbd>
-            </button>
-
+          <div className="ml-auto flex items-center gap-2">
             {confirmando ? (
               <span className="flex items-center gap-1">
                 <button
@@ -321,14 +268,15 @@ export function Estacion() {
                     setFiltro(null);
                     setSeleccion(null);
                     reiniciar();
+                    setToast("Simulación reiniciada");
                   }}
-                  className="rounded-md border border-late bg-late-soft px-2.5 py-1.5 text-[11.5px] font-semibold text-late transition hover:bg-late hover:text-white"
+                  className="rounded-lg border border-late bg-late-soft px-3 py-2 text-[12.5px] font-semibold text-late transition hover:bg-late hover:text-white"
                 >
-                  ¿Reiniciar?
+                  ¿Reiniciar simulación?
                 </button>
                 <button
                   onClick={() => setConfirmando(false)}
-                  className="rounded-md border border-line-2 bg-panel px-2 py-1.5 text-[11.5px] text-ink-3 hover:bg-panel-3"
+                  className="rounded-lg border border-line-2 bg-panel px-2 py-2 text-[12.5px] text-ink-3 hover:bg-panel-3"
                   aria-label="Cancelar reinicio"
                 >
                   ✕
@@ -337,67 +285,45 @@ export function Estacion() {
             ) : (
               <button
                 onClick={() => setConfirmando(true)}
-                className="rounded-md border border-line-2 bg-panel px-2.5 py-1.5 text-[11.5px] text-ink-2 transition hover:bg-panel-3"
+                className="rounded-lg border border-line-2 bg-panel px-3 py-2 text-[12.5px] text-ink-2 transition hover:bg-panel-3"
               >
                 Reiniciar
               </button>
             )}
           </div>
-        </header>
-
-        <Timeline snapshot={snapshot} onSeek={seek} pulso={pulso} />
-
-        {/* barra de estado persistente */}
-        <div className="grid shrink-0 grid-cols-2 border-b border-line bg-panel sm:grid-cols-2 lg:grid-cols-4">
-          <Metrica
-            rotulo="Agendado"
-            valor={snapshot.totales.agendado}
-            nota={`${snapshot.totales.citasVivas} citas vivas`}
-          />
-          <Metrica
-            rotulo="Confirmado"
-            valor={snapshot.totales.confirmado}
-            nota={`${snapshot.totales.confirmadasSinLlamar} sin llamar a nadie`}
-            tono="ok"
-          />
-          <Metrica
-            rotulo="Esperando"
-            valor={snapshot.totales.esperando}
-            nota={`plazo de ${snapshot.reglas.alertAfterHours} h`}
-          />
-          <Metrica
-            rotulo="Venció el plazo"
-            valor={snapshot.totales.vencido}
-            nota={cola ? `${cola} por decidir` : "nada pendiente"}
-            tono="late"
-          />
         </div>
-
-        <main
-          className={`min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3.5 ${
-            direccion === "derecha" ? "anim-derecha" : "anim-izquierda"
-          }`}
-          key={vista}
-        >
-          {vista === "ingresos" && (
-            <VistaIngresos snapshot={snapshot} onAbrir={abrir} onFiltrar={filtrar} />
-          )}
-          {vista === "flujo" && (
-            <VistaFlujo snapshot={snapshot} filtro={enFoco} onAbrir={abrir} />
-          )}
-          {vista === "pendientes" && (
-            <VistaPendientes
-              snapshot={snapshot}
-              seleccion={seleccion}
-              onEvento={evento}
-              onIrA={irA}
-            />
-          )}
-          {vista === "reglas" && (
-            <VistaReglas snapshot={snapshot} onGuardar={guardarReglas} />
-          )}
-        </main>
+        <Timeline snapshot={snapshot} onSeek={seek} pulso={pulso} />
       </div>
+
+      {/* área de trabajo */}
+      <main className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+          <h1 className="display mb-5 text-[22px] font-bold tracking-[-0.02em] sm:text-[26px]">
+            {titulos[vista]}
+          </h1>
+          <div key={vista} className={direccion === "derecha" ? "anim-derecha" : "anim-izquierda"}>
+            {vista === "resumen" && (
+              <VistaIngresos snapshot={snapshot} onAbrir={abrir} onFiltrar={filtrar} />
+            )}
+            {vista === "flujo" && (
+              <VistaFlujo snapshot={snapshot} filtro={enFoco} onAbrir={abrir} />
+            )}
+            {vista === "acciones" && (
+              <VistaPendientes
+                snapshot={snapshot}
+                seleccion={seleccion}
+                onEvento={evento}
+                onIrA={irA}
+              />
+            )}
+            {vista === "config" && (
+              <VistaReglas snapshot={snapshot} onGuardar={guardarConToast} />
+            )}
+          </div>
+        </div>
+      </main>
+
+      <Toast mensaje={toast} onCerrar={() => setToast(null)} />
     </div>
   );
 }

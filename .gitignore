@@ -18,3 +18,8 @@ npm-debug.log*
 
 # env
 .env*
+
+# residuo de la versión con base de datos
+*.db
+*.db-wal
+*.db-shm

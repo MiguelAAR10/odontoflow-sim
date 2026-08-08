@@ -27,6 +27,11 @@ import { clampReloj, dentroDeHorario } from "@/runtime/horario";
 const HOUR = 3_600_000;
 const CLAVE = "odontoflow:v1";
 
+// La demo arranca 24 h adelantada: ya hay citas confirmadas, rescatadas y
+// vencidas, así la primera vista se ve viva en vez de vacía. La línea de tiempo
+// permite retroceder al inicio para ver el estado incipiente.
+const AHORA_INICIAL = DEMO_START.getTime() + 24 * HOUR;
+
 interface EventoSer {
   atMs: number;
   appointmentId: string;
@@ -41,7 +46,7 @@ interface Estado {
 }
 
 const estadoInicial: Estado = {
-  nowMs: DEMO_START.getTime(),
+  nowMs: AHORA_INICIAL,
   eventos: [],
   reglas: { ...REGLAS_BASE },
 };

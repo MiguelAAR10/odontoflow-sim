@@ -18,13 +18,12 @@ const reglas: Reglas = { ...cat.reglas };
 const H = 3_600_000;
 
 describe("render del árbol", () => {
-  it("<App/> monta en el estado inicial y pinta lo esencial", () => {
+  it("<App/> monta en el estado inicial y pinta la pantalla de inicio", () => {
     const html = renderToStaticMarkup(<App />);
-    expect(html).toContain("Odontoflow");
-    expect(html).toContain("En riesgo real");
-    expect(html).toContain("Avanzar 24 h");
-    expect(html).toContain("canal simulado");
-    expect(html).toContain("respuestas simuladas");
+    expect(html).toContain("OdontoFlow");
+    expect(html).toContain("Iniciar demostración");
+    expect(html).toContain("Las citas se confirman solas");
+    expect(html).toContain("respuestas de los pacientes están simuladas");
   });
 
   it("VistaIngresos a 48 h muestra el disclaimer y no revienta", () => {
@@ -37,7 +36,7 @@ describe("render del árbol", () => {
         onFiltrar={() => {}}
       />,
     );
-    expect(html).toContain("Las respuestas de los pacientes están simuladas");
-    expect(html).toContain("Cómo va la semana");
+    expect(html).toContain("Monto en riesgo");
+    expect(html).toContain("Avance de la semana");
   });
 });

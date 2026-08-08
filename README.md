@@ -34,7 +34,7 @@ cambio, 25 % no responde), no un dato medido. La interfaz lo dice con esas palab
 
 ```bash
 npm install
-npm run dev         # http://localhost:3001
+npm run dev         # http://localhost:4321
 ```
 
 El estado de la demo se guarda en el navegador (localStorage): puedes preparar la
