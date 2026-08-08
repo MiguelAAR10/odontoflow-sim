@@ -41,11 +41,6 @@ export function Bienvenida({ onEmpezar }: { onEmpezar: () => void }) {
         Esta es una demostración con datos ficticios.
       </p>
 
-      <div className="mt-8 flex items-center gap-2 rounded-lg border border-wait-line bg-wait-soft px-3.5 py-2.5">
-        <span className="h-2 w-2 shrink-0 rounded-full bg-wait" />
-        <span className="text-[12.5px] font-medium text-wait-text">Datos ficticios de demostración</span>
-      </div>
-
       <h2 className="rotulo mt-9 text-[11px] text-ink-3">Qué vas a ver</h2>
       <ul className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         {DOMINIOS.map(({ Icono, titulo, texto }) => (

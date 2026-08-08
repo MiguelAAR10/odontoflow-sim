@@ -264,10 +264,6 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
             <kbd className="tabular rounded border border-line-3 px-1 text-[10px] opacity-70">T</kbd>
           </button>
 
-          <span className="ml-2 hidden items-center gap-1.5 rounded-lg border border-wait-line bg-wait-soft px-2.5 py-1.5 text-[11.5px] font-medium text-wait-text sm:flex">
-            Datos ficticios de demostración
-          </span>
-
           <div className="ml-auto flex items-center gap-2">
             {confirmando ? (
               <span className="flex items-center gap-1">
@@ -310,10 +306,6 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
             <h1 className="display text-[22px] font-bold tracking-[-0.02em] sm:text-[26px]">
               {titulos[vista]}
             </h1>
-            {/* etiqueta móvil de datos ficticios */}
-            <span className="flex items-center gap-1.5 rounded-lg border border-wait-line bg-wait-soft px-2.5 py-1 text-[11.5px] font-medium text-wait-text sm:hidden">
-              Datos ficticios de demostración
-            </span>
           </div>
           <div key={vista} className={direccion === "derecha" ? "anim-derecha" : "anim-izquierda"}>
             {vista === "operacion" && (

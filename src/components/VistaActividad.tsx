@@ -82,7 +82,6 @@ export function VistaActividad({ snapshot }: { snapshot: Snapshot }) {
             <b> Diego Manrique</b> confirma, <b>Valeria Ochoa</b> reprograma, <b>Raúl Ticona</b> no responde
             y <b>Mónica Arrieta</b> cancela — para que otro paciente tome su lugar desde la lista de espera.
           </p>
-          <p className="mt-2 text-[11px] text-ink-3">Datos ficticios de demostración.</p>
         </section>
       </div>
     </div>
