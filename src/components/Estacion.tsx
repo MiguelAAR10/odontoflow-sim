@@ -10,6 +10,7 @@ import { VistaLaboratorios } from "./VistaLaboratorios";
 import { VistaActividad } from "./VistaActividad";
 import { VistaReglas } from "./VistaReglas";
 import { Toast } from "./Toast";
+import { BandaSintetica } from "./BandaSintetica";
 import {
   Actividad as IconoActividad,
   Diente,
@@ -173,6 +174,10 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
     <div className="flex min-h-screen flex-col md:h-screen md:overflow-hidden">
       {/* barra superior — carbón */}
       <header className="sticky top-0 z-20 shrink-0 border-b border-dark-3 bg-dark text-[#e8efec]">
+        {/* Frontera de datos sintéticos. Va DENTRO del header sticky y FUERA del
+            switch de vistas: presente en toda vista y en todo scroll, por
+            construcción. Ver BandaSintetica.tsx y su test. */}
+        <BandaSintetica />
         <div className="mx-auto flex w-full max-w-7xl items-center gap-3 px-4 py-2.5 sm:px-6">
           <button
             onClick={onSalir}

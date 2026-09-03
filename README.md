@@ -55,8 +55,16 @@ Avanzando el reloj virtual con «Avanzar 24 h» se ve todo esto pasar en vivo.
 
 ## Qué es real y qué está simulado
 
-Esta distinción importa, así que va primero. Toda la interfaz lleva la etiqueta
-visible **«Datos ficticios de demostración»**.
+Esta distinción importa, así que va primero. Toda la interfaz lleva una banda
+permanente y no descartable: **«CLÍNICA SINTÉTICA · DATOS SIMULADOS · NO SON
+DATOS REALES»**. Está en el shell de la estación, así que aparece en todas las
+vistas, en escritorio y en móvil, y no se puede cerrar.
+
+> Nota de mantenimiento: la etiqueta original decía «Datos ficticios de
+> demostración» y se quitó en el commit `b57f7bc`, con lo que esta sección del
+> README dejó de ser cierta. La banda actual restituye el aviso con la cobertura
+> que este README ya prometía, y `tests/banda-sintetica.test.tsx` la vigila para
+> que no vuelva a desaparecer en silencio.
 
 | Pieza | Estado |
 |---|---|
