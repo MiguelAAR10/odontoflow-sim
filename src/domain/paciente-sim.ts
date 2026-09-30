@@ -66,24 +66,68 @@ export type RespuestaSimulada =
   | { tipo: "silencio" };
 
 /**
+ * Parámetros del comportamiento simulado (V2.2 — Scenario Configuration).
+ *
+ * Antes de V2.2 estos números vivían hard-codeados acá mismo (0.62, 0.13, y la
+ * fórmula de erosión 0.1/0.25/0.7/0.3). Ahora son un parámetro con default: la
+ * forma de la fórmula NO cambió, solo se volvió configurable. Ver
+ * `src/domain/scenario.ts` para el contrato completo (`ScenarioBehavior`, que
+ * tiene exactamente esta forma con nombres en inglés para la capa de
+ * escenarios) y `src/domain/scenario-compiler.ts` para cómo un
+ * `ScenarioDefinition` produce uno de estos.
+ */
+export interface ComportamientoConfig {
+  confirmProbability: number;
+  rescheduleProbability: number;
+  previousNoShowInfluence: {
+    weightPerNoShow: number;
+    cap: number;
+    confirmShare: number;
+    rescheduleShare: number;
+  };
+  /** Prioridad absoluta sobre el reparto probabilístico. Por defecto, ESCENARIO_DEMO. */
+  scriptedRoles: Record<string, RolEscenario>;
+}
+
+/**
+ * El comportamiento de siempre, como default explícito.
+ *
+ * `scriptedRoles: ESCENARIO_DEMO` por referencia: son el mismo objeto, no una
+ * copia que pueda desincronizarse.
+ */
+export const COMPORTAMIENTO_BASE: ComportamientoConfig = {
+  confirmProbability: 0.62,
+  rescheduleProbability: 0.13,
+  previousNoShowInfluence: { weightPerNoShow: 0.1, cap: 0.25, confirmShare: 0.7, rescheduleShare: 0.3 },
+  scriptedRoles: ESCENARIO_DEMO,
+};
+
+/**
  * Qué hará este paciente cuando reciba su recordatorio.
  *
- * Si el paciente tiene un rol asignado en ESCENARIO_DEMO, ese rol manda. Si no,
- * cae al reparto probabilístico: ~62 % confirma, ~13 % pide otro horario,
- * ~25 % no responde. Cada inasistencia previa empuja la balanza hacia el silencio
- * (como en la vida real y como refleja `risk.ts`), así el riesgo que muestra la
- * interfaz se corresponde con lo que luego pasa.
+ * Si el paciente tiene un rol asignado en `comportamiento.scriptedRoles`, ese
+ * rol manda. Si no, cae al reparto probabilístico de `comportamiento`
+ * (por defecto: ~62 % confirma, ~13 % pide otro horario, ~25 % no responde).
+ * Cada inasistencia previa empuja la balanza hacia el silencio (como en la
+ * vida real y como refleja `risk.ts`), así el riesgo que muestra la interfaz
+ * se corresponde con lo que luego pasa.
  *
- * `trasHoras` es cuánto tarda en responder desde el primer recordatorio. Para los
- * roles fijos es estable y legible (2 h confirma, 3 h reprograma, 2 h cancela),
- * para que los hitos caigan en horas redondas al avanzar el reloj.
+ * `trasHoras` es cuánto tarda en responder desde el primer recordatorio. Para
+ * los roles fijos es estable y legible (2 h confirma, 3 h reprograma, 2 h
+ * cancela), para que los hitos caigan en horas redondas al avanzar el reloj.
+ *
+ * `comportamiento` es OPCIONAL y por defecto es `COMPORTAMIENTO_BASE` — el
+ * comportamiento de siempre. Todo llamador existente (motor, tests) sigue
+ * compilando y observando exactamente el mismo resultado sin cambiar una
+ * línea.
  */
 export function respuestaDe(
   appointmentId: string,
   pacienteId: string,
   inasistenciasPrevias: number,
+  comportamiento: ComportamientoConfig = COMPORTAMIENTO_BASE,
 ): RespuestaSimulada {
-  const rol = ESCENARIO_DEMO[pacienteId];
+  const rol = comportamiento.scriptedRoles[pacienteId];
   if (rol === "confirma") return { tipo: "confirma", trasHoras: 2 };
   if (rol === "reprograma") return { tipo: "reprograma", trasHoras: 3 };
   if (rol === "cancela") return { tipo: "cancela", trasHoras: 2 };
@@ -91,9 +135,10 @@ export function respuestaDe(
   if (rol === "silencio") return { tipo: "silencio" };
 
   // Más faltas previas → más silencio. Tope para no volverse absurdo.
-  const silencioExtra = Math.min(inasistenciasPrevias * 0.1, 0.25);
-  const pConfirma = 0.62 - silencioExtra * 0.7;
-  const pReprograma = 0.13 - silencioExtra * 0.3;
+  const inf = comportamiento.previousNoShowInfluence;
+  const silencioExtra = Math.min(inasistenciasPrevias * inf.weightPerNoShow, inf.cap);
+  const pConfirma = comportamiento.confirmProbability - silencioExtra * inf.confirmShare;
+  const pReprograma = comportamiento.rescheduleProbability - silencioExtra * inf.rescheduleShare;
 
   const roll = unit(appointmentId, "tipo");
   // Entre 0.5 y 5 h, para que las respuestas lleguen espaciadas y no todas a la vez.

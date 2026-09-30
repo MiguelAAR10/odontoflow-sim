@@ -65,6 +65,15 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
     registrarEvento,
     reiniciar,
     guardarReglas,
+    escenarioId,
+    escenarios,
+    comportamiento,
+    doctores,
+    tratamientos,
+    seleccionarEscenario,
+    guardarComportamiento,
+    guardarDoctores,
+    guardarTratamientos,
   } = useOdonto();
 
   const [vista, setVista] = useState<Vista>(vistaInicialDeUrl);
@@ -323,7 +332,21 @@ export function Estacion({ onSalir }: { onSalir: () => void }) {
             {vista === "pacientes" && <VistaPacientes snapshot={snapshot} />}
             {vista === "doctores" && <VistaDoctores snapshot={snapshot} onAbrir={abrir} />}
             {vista === "laboratorios" && <VistaLaboratorios snapshot={snapshot} />}
-            {vista === "config" && <VistaReglas snapshot={snapshot} onGuardar={guardarConToast} />}
+            {vista === "config" && (
+              <VistaReglas
+                snapshot={snapshot}
+                onGuardar={guardarConToast}
+                escenarioId={escenarioId}
+                escenarios={escenarios}
+                comportamiento={comportamiento}
+                doctores={doctores}
+                tratamientos={tratamientos}
+                onSeleccionarEscenario={seleccionarEscenario}
+                onGuardarComportamiento={guardarComportamiento}
+                onGuardarDoctores={guardarDoctores}
+                onGuardarTratamientos={guardarTratamientos}
+              />
+            )}
           </div>
         </div>
       </main>

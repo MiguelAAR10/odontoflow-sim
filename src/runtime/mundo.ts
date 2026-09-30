@@ -9,7 +9,7 @@ import {
   textoReprogramacion,
   type PlantillaCita,
 } from "@/domain/channel";
-import { respuestaDe } from "@/domain/paciente-sim";
+import { respuestaDe, COMPORTAMIENTO_BASE, type ComportamientoConfig } from "@/domain/paciente-sim";
 import { primerCandidato, candidatosParaHueco } from "@/domain/lista-espera";
 import { DEMO_START } from "@/domain/seed";
 import { opcionesParaReprogramar, opcionElegida } from "@/domain/reprogramacion";
@@ -120,7 +120,15 @@ function mover(c: Cita, to: AppointmentStatus) {
  * aplica a la aceptación de un hueco por parte de un candidato de la lista de
  * espera: se deriva del id del candidato.
  */
-export function reproducir(cat: Catalogo, eventos: UserEvent[], reglas: Reglas, target: Date): Mundo {
+export function reproducir(
+  cat: Catalogo,
+  eventos: UserEvent[],
+  reglas: Reglas,
+  target: Date,
+  // V2.2 — Scenario Configuration. Opcional: el default es el comportamiento
+  // de siempre, así que ningún llamador existente necesita cambiar.
+  comportamiento: ComportamientoConfig = COMPORTAMIENTO_BASE,
+): Mundo {
   const rc = runCat(cat);
   const destino = clampReloj(target);
 
@@ -623,7 +631,7 @@ export function reproducir(cat: Catalogo, eventos: UserEvent[], reglas: Reglas, 
       if (c.status !== "reminded" && c.status !== "no_response") continue;
 
       const previas = rc.pacientes.get(c.pacienteId)?.previousNoShows ?? 0;
-      let r = respuestaDe(c.id, c.pacienteId, previas);
+      let r = respuestaDe(c.id, c.pacienteId, previas, comportamiento);
       // Si la cita ya fue reagendada por la sim una vez, no vuelve a pedirlo: la
       // tratamos como silencio para no entrar en bucle de reprogramaciones.
       if (yaReprogramada.has(c.id) && (r.tipo === "reprograma" || r.tipo === "cancela")) {
